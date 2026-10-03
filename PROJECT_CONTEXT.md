@@ -35,9 +35,10 @@ We want a rechargeable coin-cell solution while preserving approximately the CR2
 Chosen Battery: **ML2016** rechargeable lithium coin cell (~3.0V nominal).
 We are discarding the original Casio metal internal cage and instead using a low-profile SMD battery retainer (e.g., Keystone 3003) soldered directly to the back of the PCB.
 
-5. **TWO-CONTACT CHARGING INTERFACE (The "Floating Button" Architecture)**
-We want to use the watch's physical side buttons as a charging input by inserting the watch into a dock that pushes the buttons down. 
-Because we discarded the internal metal VCC cage, the stainless steel buttons sit suspended in the resin case and are electrically floating. The PCB edge cutouts will feature **split (interdigitated) pads**. When a button is pushed by a dock (applying 5V to one button and GND to another), the flat inner tip of the metal button bridges the split pads, safely routing power to an internal charging IC while series resistors protect the MCU GPIOs from 5V overvoltage.
+5. **TWO-CONTACT CHARGING INTERFACE (Button Charging Options)**
+We want to use the watch's physical side buttons as a charging input by inserting the watch into a dock that pushes the buttons down. *Note: The final button architecture is still open-ended and actively being explored.*
+- **Option A (Floating Button / Split-Pad):** Discard the internal metal VCC cage entirely. The stainless steel buttons sit suspended in the resin case and are electrically floating. The PCB edge cutouts feature **split (interdigitated) pads**. When a button is pushed by a dock (applying 5V to one button and GND to another), the flat inner tip of the metal button bridges the split pads, routing power to an internal charging IC while series resistors protect the MCU GPIOs.
+- **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This would allow two of the buttons to no longer contact the battery (VCC), isolating them for use as separate charging contacts while retaining the original mechanical leaf springs.
 
 6. **OTA / WIRELESS FIRMWARE UPDATES**
 Normal firmware development and updates should NOT require opening the watch. We will use Zephyr's SMP Server for OTA DFU. Physical programming/debug access (SWD) will still exist internally as emergency recovery.

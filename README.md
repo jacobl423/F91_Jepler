@@ -19,12 +19,10 @@ We have completely redesigned the core architecture to turn this into a modern, 
 - **Sensors:** Added a tiny 2x2mm ultra-low-power accelerometer (Bosch BMA400 or ST LIS2DW12) for step counting and tap/raise-to-wake gesture detection.
 - **Battery:** Upgraded from a disposable CR2016 to a **rechargeable ML2016** (Lithium Manganese Dioxide) coin cell.
 
-### The "Floating Button" Charging System
-To achieve a rechargeable design without drilling holes in the classic Casio case, the f91_jepler introduces a novel charging architecture:
-1. The original Casio internal stamped-metal cage (which tied all buttons to battery positive) has been discarded. 
-2. A low-profile SMD battery retainer holds the ML2016, leaving the watch's external stainless steel buttons electrically floating.
-3. The PCB features split (interdigitated) edge pads. When a watch button is pressed, its flat inner tip bridges the split pads together, acting as a switch.
-4. **Charging:** When placed in a custom dock, the dock pushes the Left-Top button (applying 5V) and the Left-Bottom button (applying Ground). The split pads route this directly to an onboard 3.1V constant-voltage charging IC, safely charging the ML2016 while utilizing series resistors to protect the MCU GPIOs from 5V overvoltage.
+### Novel Charging System Explorations
+To achieve a rechargeable design without drilling holes in the classic Casio case, the f91_jepler is exploring two primary charging architectures that use the external watch buttons as charging contacts:
+* **Option A (The "Floating Button" Architecture):** Discard the original Casio metal internal cage entirely and use an SMD battery retainer. This leaves the watch's external stainless steel buttons electrically floating. The PCB uses split (interdigitated) edge pads that the buttons bridge when pushed, allowing a dock to apply 5V to one button and GND to another safely.
+* **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This isolates two of the buttons from the battery positive (VCC), allowing them to act as separate charging contacts while retaining the original mechanical spring tension provided by the cage.
 
 ## Software Architecture
 
