@@ -23,8 +23,8 @@ Below is the initial list of core components required for the f91_jepler hardwar
 ### 4. Battery & Power
 *   **Battery Part:** **ML2016** Rechargeable Lithium Manganese Dioxide Coin Cell
     *   **Description:** 3.0V nominal, 20mm diameter, 1.6mm thickness. Same physical footprint as original but rechargeable.
-    *   **Estimated Price:** $3.00
-    *   **Buy Link:** [Digi-Key: Maxell ML2016](https://www.digikey.com/en/products/detail/maxell/ML2016/16606013)
+    *   **Estimated Price:** $7.50
+    *   **Buy Link:** [Esslinger: Maxell ML2016 Rechargeable Watch Battery](https://www.esslinger.com/maxell-ml2016-rechargeable-lithium-coin-cell-battery-with-or-without-tabs/)
 *   **Battery Retainer:** Keystone **3003** 
     *   **Description:** Surface-mount 20mm battery clip to hold the ML2016.
     *   **Estimated Price:** $1.00
@@ -41,6 +41,6 @@ Below is the initial list of core components required for the f91_jepler hardwar
 *   **Buy Link:** [Digi-Key: MX25R1635F](https://www.digikey.com/en/products/detail/macronix/MX25R1635FZUIH0/6007421)
 
 ---
-### **Total Core Component Cost:** ~$16.30
+### **Total Core Component Cost:** ~$20.80
 
-*Note: This BOM lists the major active components for a single unit. Passive components (resistors, debounce capacitors, decoupling caps) and the bare PCB from PCBWay will add slightly to the overall build cost, but the silicon and display totals roughly $16.*
+*Note: This BOM lists the major active components for a single unit. Passive components (resistors, debounce capacitors, decoupling caps) and the bare PCB from PCBWay will add slightly to the overall build cost, but the silicon and display totals roughly $21.*
