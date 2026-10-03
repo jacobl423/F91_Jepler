@@ -1,0 +1,18 @@
+:name: F91 Jepler Emulator (nRF52840)
+:description: This script runs the Zephyr RTOS firmware for the f91_jepler on a virtual nRF52840.
+
+using sysbus
+$name?="nRF52840"
+mach create $name
+
+machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
+
+# We can connect a virtual SSD1306 display here on the I2C bus later.
+# For now, it will just boot the MCU and allow flashing/debugging.
+
+macro reset
+"""
+    sysbus LoadELF $bin
+"""
+
+runMacro $reset
