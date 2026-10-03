@@ -2,10 +2,14 @@
 :description: This script runs the Zephyr RTOS firmware for the f91_jepler on a virtual nRF52840.
 
 using sysbus
+$mcuboot_bin?=@bin/mcuboot.elf
+$app_bin?=@bin/app.signed.bin
 $name?="nRF52840"
 mach create $name
 
 machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
+include @Firmware/renode/F91SSD1306.cs
+machine LoadPlatformDescriptionFromString "display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 40 }"
 
 # Renode's nRF52840 model uses a dummy Tag for FICR.
 # Zephyr's NVMC driver reads FICR to determine flash size.
@@ -15,8 +19,8 @@ machine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x
 
 macro reset
 """
-    sysbus WriteDoubleWord 0x10000010 0x00000100
-    sysbus WriteDoubleWord 0x10000014 0x00001000
+    sysbus WriteDoubleWord 0x10000010 0x00001000
+    sysbus WriteDoubleWord 0x10000014 0x00000100
 
     sysbus LoadELF $mcuboot_bin
     sysbus LoadBinary $app_bin 0x0c000

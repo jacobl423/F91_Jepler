@@ -1,0 +1,15 @@
+/* SSD1306 framebuffer writes require whole 8-row pages. */
+&ssd1306 {
+    height = <40>;
+    multiplex-ratio = <39>;
+};
+
+/* Emulator assignments use the existing nRF52840 DK buttons.
+ * The custom nRF PCB's A/B/C pin numbers have not been specified yet. */
+/ {
+    aliases {
+        watch-a = &button0;
+        watch-b = &button1;
+        watch-c = &button2;
+    };
+};
