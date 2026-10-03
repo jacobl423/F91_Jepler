@@ -54,6 +54,6 @@ bin/
 
 # Zephyr specific
 .west/
-zephyr/
-modules/
-bootloader/
+/zephyr/
+/modules/
+/bootloader/
