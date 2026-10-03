@@ -21,8 +21,8 @@ We have completely redesigned the core architecture to turn this into a modern, 
 
 ### Novel Charging System Explorations
 To achieve a rechargeable design without drilling holes in the classic Casio case, the f91_jepler is exploring two primary charging architectures that use the external watch buttons as charging contacts:
-* **Option A (The "Floating Button" Architecture):** Discard the original Casio metal internal cage entirely and use an SMD battery retainer. This leaves the watch's external stainless steel buttons electrically floating. The PCB uses split (interdigitated) edge pads that the buttons bridge when pushed, allowing a dock to apply 5V to one button and GND to another safely.
-* **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This isolates two of the buttons from the battery positive (VCC), allowing them to act as separate charging contacts while retaining the original mechanical spring tension provided by the cage.
+* **Option A (The "Floating Button" Architecture):** Discard the original Casio metal internal cage entirely and use an SMD battery retainer. This leaves the watch's external stainless steel buttons electrically floating. The PCB uses split (interdigitated) edge pads that the buttons bridge when pushed, allowing a dock to apply 5V to one button and GND to another safely. **Warning:** Without the metal cage, there are no leaf springs to "unpress" the buttons, meaning they will feel mushy and likely get stuck inward.
+* **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This isolates two of the buttons from the battery positive (VCC), allowing them to act as separate charging contacts while retaining the original mechanical spring tension provided by the cage (solving the issue in Option A).
 
 ## Software Architecture
 
