@@ -43,4 +43,8 @@ Below is the initial list of core components required for the f91_jepler hardwar
 ---
 ### **Total Core Component Cost:** ~$20.80
 
-*Note: This BOM lists the major active components for a single unit. Passive components (resistors, debounce capacitors, decoupling caps) and the bare PCB from PCBWay will add slightly to the overall build cost, but the silicon and display totals roughly $21.*
+### **Estimated Additional Costs:**
+*   **Passive Components (Resistors, Capacitors, etc.):** ~$1.50 per board
+*   **Bare PCB (PCBWay):** ~$5.00 for a batch of 5 (excluding shipping)
+
+*Note: The total cost to build a single complete watch (silicon, display, battery, passives, and one PCB from a batch) will be roughly **$23 - $25**, not accounting for shipping costs from the various distributors.*
