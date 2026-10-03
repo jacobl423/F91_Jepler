@@ -57,3 +57,5 @@ bin/
 /zephyr/
 /modules/
 /bootloader/
+/tools/
+/doc/
