@@ -7,12 +7,19 @@ mach create $name
 
 machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
 
-# We can connect a virtual SSD1306 display here on the I2C bus later.
-# For now, it will just boot the MCU and allow flashing/debugging.
+# Renode's nRF52840 model uses a dummy Tag for FICR.
+# Zephyr's NVMC driver reads FICR to determine flash size.
+# If it returns 0, MCUboot fails to read the flash image.
+# We replace it with MappedMemory and set the size correctly (256 pages * 4096 bytes = 1MB).
+machine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
 
 macro reset
 """
-    sysbus LoadELF $bin
+    sysbus WriteDoubleWord 0x10000010 0x00000100
+    sysbus WriteDoubleWord 0x10000014 0x00001000
+
+    sysbus LoadELF $mcuboot_bin
+    sysbus LoadBinary $app_bin 0x0c000
 """
 
 runMacro $reset

@@ -43,3 +43,17 @@ Icon
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+
+# C/C++ and Zephyr Build Artifacts
+*.elf
+*.bin
+*.hex
+*.map
+*.log
+bin/
+
+# Zephyr specific
+.west/
+zephyr/
+modules/
+bootloader/
