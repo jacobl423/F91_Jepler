@@ -8,7 +8,7 @@ public struct RenodeScriptGenerator {
         ssd1306CsPath: String?
     ) -> String {
         var script = """
-        mach create "nRF52840"
+        mach create
         machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
         """
         
@@ -32,8 +32,6 @@ public struct RenodeScriptGenerator {
         
         script += """
         \nsysbus LoadBinary @\(appBinPath) 0xc000
-        sysbus.cpu VectorTableOffset 0x0
-        sysbus.cpu Reset
         start
         """
         
