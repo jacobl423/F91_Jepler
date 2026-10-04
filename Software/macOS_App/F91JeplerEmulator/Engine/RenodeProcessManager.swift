@@ -32,7 +32,7 @@ public final class RenodeProcessManager {
         bootloaderURL: URL?,
         ssd1306CsURL: URL?,
         renodePath: String
-    ) throws -> (port: UInt16, uartLogURL: URL) {
+    ) throws -> (port: UInt16, uartPort: UInt16) {
         stop()
         
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("f91_renode_\(UUID().uuidString)")
@@ -58,13 +58,17 @@ public final class RenodeProcessManager {
             }
         }
         
-        let uartLog = tempDir.appendingPathComponent("uart.log")
-        self.uartLogURL = uartLog
+        let freePort = findFreePort()
+        var uartPort = findFreePort()
+        if uartPort == freePort {
+            uartPort += 1
+        }
+        self.port = freePort
         
         let rescContent = RenodeScriptGenerator.generateResc(
             appBinPath: localAppBin.path,
             bootloaderPath: localBootloader?.path,
-            uartLogPath: uartLog.path,
+            uartPort: uartPort,
             ssd1306CsPath: localSSD1306?.path
         )
         
@@ -74,9 +78,6 @@ public final class RenodeProcessManager {
         let configContent = "[general]\nhistory-path = \(tempDir.appendingPathComponent("history").path)\n"
         let configFile = tempDir.appendingPathComponent("renode.config")
         try configContent.write(to: configFile, atomically: true, encoding: .utf8)
-        
-        let freePort = findFreePort()
-        self.port = freePort
         
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: renodePath)
@@ -106,7 +107,7 @@ public final class RenodeProcessManager {
         try proc.run()
         self.process = proc
         
-        return (freePort, uartLog)
+        return (freePort, uartPort)
     }
     
     public func stop() {

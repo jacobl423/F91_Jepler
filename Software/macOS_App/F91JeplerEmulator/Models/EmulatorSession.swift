@@ -47,7 +47,7 @@ public final class EmulatorSession: ObservableObject {
     
     private let processManager = RenodeProcessManager()
     private let socketClient = RenodeSocketClient()
-    private var logTimer: Timer?
+    private let uartSocketClient = RenodeUartSocketClient()
     private var frameTimer: Timer?
     private var framePpmURL: URL?
     
@@ -116,7 +116,7 @@ public final class EmulatorSession: ObservableObject {
         }
         
         do {
-            let (port, uartLogURL) = try processManager.start(
+            let (port, uartPort) = try processManager.start(
                 appBinURL: appBinURL,
                 bootloaderURL: bootloaderURL,
                 ssd1306CsURL: ssd1306CsURL,
@@ -151,10 +151,20 @@ public final class EmulatorSession: ObservableObject {
                 }
             }
             
-            // Connect socket with auto-retry
-            self.socketClient.connect(port: port)
+            uartSocketClient.onTextReceived = { [weak self] text in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    self.uartLogs += text
+                    if self.uartLogs.count > 32000 {
+                        self.uartLogs = String(self.uartLogs.suffix(16000))
+                    }
+                }
+            }
             
-            startLogPolling(uartLogURL: uartLogURL)
+            // Connect sockets with auto-retry
+            self.socketClient.connect(port: port)
+            self.uartSocketClient.connect(port: uartPort)
+            
             startFramePolling()
             
         } catch {
@@ -206,24 +216,6 @@ public final class EmulatorSession: ObservableObject {
         self.uartLogs += "\n--- MACHINE COLD REBOOT ---\n"
     }
     
-    private func startLogPolling(uartLogURL: URL) {
-        logTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                guard let self = self else { return }
-                if let fileData = try? Data(contentsOf: uartLogURL), !fileData.isEmpty {
-                    let fileLogs = String(decoding: fileData, as: UTF8.self)
-                    DispatchQueue.main.async {
-                        self.uartLogs = String(fileLogs.suffix(16000))
-                    }
-                }
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.logTimer = timer
-    }
-    
     private func startFramePolling() {
         frameTimer?.invalidate()
         guard let ppmURL = self.framePpmURL else { return }
@@ -270,8 +262,7 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func stopSession() {
-        logTimer?.invalidate()
-        logTimer = nil
+        uartSocketClient.disconnect()
         frameTimer?.invalidate()
         frameTimer = nil
         socketClient.disconnect()
@@ -281,7 +272,7 @@ public final class EmulatorSession: ObservableObject {
     }
     
     deinit {
-        logTimer?.invalidate()
+        uartSocketClient.disconnect()
         frameTimer?.invalidate()
         socketClient.disconnect()
         processManager.stop()

@@ -4,7 +4,7 @@ public struct RenodeScriptGenerator {
     public static func generateResc(
         appBinPath: String,
         bootloaderPath: String?,
-        uartLogPath: String,
+        uartPort: UInt16,
         ssd1306CsPath: String?
     ) -> String {
         var script = """
@@ -21,7 +21,8 @@ public struct RenodeScriptGenerator {
         \nmachine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
         sysbus WriteDoubleWord 0x10000010 0x00001000
         sysbus WriteDoubleWord 0x10000014 0x00000100
-        sysbus.uart0 RecordToAFile @\(uartLogPath)
+        emulation CreateServerSocketTerminal \(uartPort) "uart_term" false
+        connector Connect sysbus.uart0 uart_term
         machine StartGDBServer 3333
         """
         
