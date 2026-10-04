@@ -3,6 +3,27 @@
 #include <zephyr/display/cfb.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/gpio.h>
+#include <stdio.h>
+
+static int draw_clock(const struct device *display, uint64_t seconds,
+                      const bool pressed[3])
+{
+    unsigned int day_seconds = seconds % (24 * 60 * 60);
+    unsigned int hour = day_seconds / 3600;
+    char time_text[9];
+    char label[] = "A B C";
+
+    snprintf(time_text, sizeof(time_text), "%02u:%02u:%02u",
+             hour % 12 ? hour % 12 : 12, day_seconds / 60 % 60, day_seconds % 60);
+    for (int i = 0; i < 3; i++) {
+        if (!pressed[i]) label[i * 2] = '-';
+    }
+    cfb_framebuffer_clear(display, false);
+    cfb_print(display, hour < 12 ? "AM" : "PM", 0, 0);
+    if (pressed[0] || pressed[1] || pressed[2]) cfb_print(display, label, 40, 0);
+    cfb_print(display, time_text, 0, 16);
+    return cfb_framebuffer_finalize(display);
+}
 
 #if DT_NODE_EXISTS(DT_ALIAS(watch_a))
 static const struct gpio_dt_spec buttons[] = {
@@ -35,17 +56,17 @@ int main(void)
         return 0;
     }
 
-    cfb_framebuffer_clear(display, false);
-
-    cfb_print(display, "f91jepler", 0, 0);
-    cfb_print(display, "10:08 AM", 0, 16);
-
-    int err = cfb_framebuffer_finalize(display);
+    bool pressed[3] = {false};
+    /* Midnight is relative to this application boot, not the host wall clock. */
+    const int64_t clock_epoch_ms = k_uptime_get();
+    uint64_t shown_seconds = 0;
+    int err = draw_clock(display, 0, pressed);
     if (err) {
         printk("Framebuffer write failed: %d\n", err);
         return 0;
     }
     printk("Watch screen ready\n");
+    printk("Time: 12:00:00 AM\n");
 
 #if DT_NODE_EXISTS(DT_ALIAS(watch_a))
     for (int i = 0; i < ARRAY_SIZE(buttons); i++) {
@@ -54,12 +75,11 @@ int main(void)
             return 0;
         }
     }
-    bool pressed[3] = {false};
     int64_t press_time[3] = {0};
 #endif
     while (1) {
-#if DT_NODE_EXISTS(DT_ALIAS(watch_a))
         bool changed = false;
+#if DT_NODE_EXISTS(DT_ALIAS(watch_a))
         for (int i = 0; i < ARRAY_SIZE(buttons); i++) {
             int value = gpio_pin_get_dt(&buttons[i]);
             if (value < 0 || pressed[i] == (value != 0)) {
@@ -75,18 +95,19 @@ int main(void)
                        (long long)(k_uptime_get() - press_time[i]));
             }
         }
-        if (changed) {
-            char label[] = "A B C";
-            for (int i = 0; i < 3; i++) {
-                if (!pressed[i]) label[i * 2] = '-';
-            }
-            cfb_framebuffer_clear(display, false);
-            cfb_print(display, pressed[0] || pressed[1] || pressed[2] ? label : "f91jepler", 0, 0);
-            cfb_print(display, "10:08 AM", 0, 16);
-            err = cfb_framebuffer_finalize(display);
+#endif
+        uint64_t seconds = (k_uptime_get() - clock_epoch_ms) / 1000;
+        if (seconds != shown_seconds) {
+            unsigned int day_seconds = seconds % (24 * 60 * 60);
+            unsigned int hour = day_seconds / 3600;
+            printk("Time: %02u:%02u:%02u %s\n", hour % 12 ? hour % 12 : 12,
+                   day_seconds / 60 % 60, day_seconds % 60, hour < 12 ? "AM" : "PM");
+        }
+        if (changed || seconds != shown_seconds) {
+            shown_seconds = seconds;
+            err = draw_clock(display, seconds, pressed);
             if (err) printk("Framebuffer write failed: %d\n", err);
         }
-#endif
         k_sleep(K_MSEC(10));
     }
     return 0;

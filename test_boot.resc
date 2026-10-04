@@ -1,0 +1,9 @@
+mach create
+machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
+machine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
+sysbus WriteDoubleWord 0x10000010 0x00000100
+sysbus WriteDoubleWord 0x10000014 0x00001000
+sysbus.uart0 RecordToAFile @uart_output.txt
+sysbus LoadELF @bin/mcuboot.elf
+sysbus LoadBinary @bin/app.signed.bin 0x0c000
+start

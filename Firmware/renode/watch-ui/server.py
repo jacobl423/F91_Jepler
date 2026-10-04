@@ -72,6 +72,7 @@ class Watch:
         self.frame = b''
         self.error = ''
         self.stopped = threading.Event()
+        self.reboot_requested = threading.Event()
         self.out = ROOT/'build/renode'/('watch-' + time.strftime('%Y%m%d-%H%M%S') + '-' + str(os.getpid()))
         self.out.mkdir(parents=True)
         (self.out/'tmp').mkdir()
@@ -101,6 +102,15 @@ class Watch:
                 self.desired = new_state
             self.last_input = time.monotonic()
 
+    def reboot(self):
+        with self.lock:
+            if self.error or not self.thread.is_alive():
+                raise RuntimeError('Renode connection is unavailable; restart the viewer')
+            self.desired.clear()
+            self.transitions.clear()
+            self.frame = b''
+            self.reboot_requested.set()
+
     def run(self):
         monitor = None
         try:
@@ -126,6 +136,19 @@ class Watch:
             monitor.command('emulation RunFor "2"')
             while not self.stopped.is_set():
                 started = time.monotonic()
+                if self.reboot_requested.is_set():
+                    # All monitor commands stay on this thread. Recreate the
+                    # machine from its boot images, while keeping HTTP alive.
+                    monitor.command('clear')
+                    (self.out/'uart.log').write_text('')
+                    monitor.command('include @' + str(self.out/'watch.resc'))
+                    for b in self.bindings:
+                        monitor.command(f"sysbus.{b['port']} OnGPIO {b['pin']} {str(b['active_low']).lower()}")
+                    with self.lock:
+                        self.applied.clear()
+                        self.desired.clear()
+                        self.transitions.clear()
+                        self.reboot_requested.clear()
                 with self.lock:
                     if started - self.last_input >= 1.5:
                         self.transitions.clear()
@@ -155,7 +178,7 @@ class Watch:
         uart = self.out/'uart.log'
         text = uart.read_text(errors='replace') if uart.exists() else ''
         with self.lock:
-            return dict(ready=bool(self.frame) and not self.error, error=self.error,
+            return dict(ready=bool(self.frame) and not self.error and not self.reboot_requested.is_set(), error=self.error,
                         frame=self.sequence, buttons=self.bindings, pressed=sorted(self.applied),
                         uart=text[-12000:], logs=str(self.out))
 
@@ -203,19 +226,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         # Only the local viewer may drive GPIOs. No cross-origin requests.
-        if self.path != '/api/input' or self.headers.get('X-Watch-UI') != '1':
+        if self.path not in ('/api/input', '/api/reboot') or self.headers.get('X-Watch-UI') != '1':
             self.respond({'error': 'Forbidden'}, status=403)
             return
         origin = self.headers.get('Origin')
         if origin and origin != 'http://' + self.headers.get('Host', ''):
             self.respond({'error': 'Forbidden'}, status=403)
             return
+        if self.path == '/api/reboot':
+            try:
+                self.server.watch.reboot()
+                self.respond({'ok': True, 'message': 'Renode cold boot queued'}, status=202)
+            except RuntimeError as error:
+                self.respond({'error': str(error)}, status=503)
+            return
         try:
             length = int(self.headers.get('Content-Length', '0'))
             if not 0 < length < 1024:
                 raise ValueError('Invalid input length')
             pressed = json.loads(self.rfile.read(length))['pressed']
-            if not isinstance(pressed, list) or any(k not in ('1','2','3') for k in pressed):
+            valid_keys = {b['key'] for b in self.server.watch.bindings}
+            if not isinstance(pressed, list) or any(k not in valid_keys for k in pressed):
                 raise ValueError('Invalid keys')
             self.server.watch.input(pressed)
             self.respond({'ok': True})

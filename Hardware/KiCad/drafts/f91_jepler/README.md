@@ -62,9 +62,7 @@ No mounting holes or bracket slots have been invented.
    charging connector and system-load isolation or power path. These are **not
    implemented**. BQ25100 alone does not supply a complete power path; system
    load can affect charge termination. There is no working charging input yet.
-3. Resolve the display discrepancy: firmware currently uses I2C, while the
-   purchasing link describes SPI. Verify the exact OLED variant, supply rails,
-   reset, pinout, FPC land pattern and pull-ups before wiring it.
+3. Resolve the display connections: the firmware currently uses I2C (`i2c0` at `0x3c`), which matches the legacy Kepler hardware. The OLED module must be ordered as the I2C variant or modified (BS0/BS1 resistors) for I2C. Verify the exact supply rails, reset, pinout, FPC land pattern and pull-ups before wiring it.
 4. Select the RF antenna and design its keepout/matching for the actual case,
    battery and metal bracket. The RF test pad is not a working antenna.
 5. Complete the four-layer stack-up and copper routing. This draft has no

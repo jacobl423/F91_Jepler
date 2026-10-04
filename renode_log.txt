@@ -1,0 +1,6 @@
+[18:13:58.7375] [INFO] Loaded monitor commands from: /Applications/Renode.app/Contents/MacOS/scripts/monitor.py
+[18:13:58.7447] [INFO] Monitor available in telnet mode on port 1239
+[18:13:58.8071] [INFO] Including script(s): /Users/jacobloesch/Documents/F91_Jepler/test_boot.resc
+[18:13:58.8145] [INFO] System bus created.
+[18:13:59.3289] [WARNING] Translation cache size 536870912 is larger than maximum allowed 134217728. It will be clamped to maximum
+[18:13:59.5656] [INFO] sysbus: Loaded SVD: /var/folders/vd/j_f4q_2d7kl4j0qwnc9qyd440000gn/T/renode-3482/255d84bf-476a-4cb8-89ed-47882138955a.tmp. Name: nrf52840. Description: nRF52840 reference description for radio MCU with ARM 32-bit Cortex-M4 Microcontroller .

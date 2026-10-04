@@ -20,9 +20,9 @@ Below is the list of core components required for the f91_jepler hardware redesi
 
 ### 3. Display
 *   **Part:** 0.83-inch Monochrome OLED Display Module (Blue on Black)
-*   **Description:** Fits the original Casio F91W window perfectly. Uses an SSD1306 controller and SPI interface.
+*   **Description:** Fits the original Casio F91W window perfectly. Uses an SSD1306 controller. **CRITICAL:** The Zephyr firmware and legacy hardware use I2C (`i2c0` at `0x3c`). You must order the I2C variant or modify the SPI module's BS0/BS1 resistors for I2C to match the firmware configuration.
 *   **Estimated Price:** $3.50
-*   **Buy Link:** [BuyDisplay (EastRising) ER-OLED0.83-1](https://www.buydisplay.com/0-83-inch-oled-display-module-spi-ssd1306-controller-blue-on-black-96x39)
+*   **Buy Link:** [BuyDisplay (EastRising) ER-OLED0.83-1](https://www.buydisplay.com/0-83-inch-oled-display-module-spi-ssd1306-controller-blue-on-black-96x39) (Select I2C or bridge for I2C)
 *   Other color option: [Black background with white text](https://www.buydisplay.com/96x39-pixel-0-83-inch-small-oled-display-manufacturers-i2c-serial-spi)
 
 ### 4. Battery & Power Management

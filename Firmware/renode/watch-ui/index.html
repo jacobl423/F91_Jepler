@@ -1,27 +1,113 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>F91 Jepler · Watch emulator</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>f91_jepler — Emulator</title>
 <style>
-:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#232724;background:#f3f2ed;font-synthesis:none}*{box-sizing:border-box}body{margin:0}header{height:85px;border-bottom:1px solid #d8dbd3;padding:0 6vw;display:flex;align-items:center;justify-content:space-between}.brand{font-size:17px;letter-spacing:3px;font-weight:750}.brand span{color:#7b847c;font-weight:400;margin-left:13px;font-size:12px;letter-spacing:1px}.status{font:12px ui-monospace,monospace;display:flex;align-items:center;gap:9px}.dot{width:7px;height:7px;background:#be942d;border-radius:50%}.live .dot{background:#3e8966;box-shadow:0 0 0 4px #3e896612}main{max-width:1140px;margin:auto;padding:64px 40px 24px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:2.6px;color:#747e76}h1{font-weight:500;letter-spacing:-1.8px;font-size:43px;margin:10px 0 14px}.intro{color:#6c756e;line-height:1.6;font-size:14px;max-width:550px}.workspace{display:grid;grid-template-columns:minmax(420px,1.45fr) minmax(270px,1fr);gap:65px;align-items:center;margin-top:25px}.stage{position:relative;min-height:540px;display:flex;justify-content:center;align-items:center;background:radial-gradient(ellipse,#e0e3db70,transparent 67%)}.watch{width:380px;height:350px;position:relative;filter:drop-shadow(0 23px 18px #1c271927)}.strap{position:absolute;background:repeating-linear-gradient(0deg,#202321 0 15px,#2a2d2b 16px 17px);width:228px;height:104px;left:76px;border-left:5px solid #303330;border-right:5px solid #303330;z-index:0}.strap.top{top:-96px;border-radius:24px 24px 0 0;transform:perspective(250px) rotateX(12deg)}.strap.bottom{bottom:-96px;border-radius:0 0 24px 24px;transform:perspective(250px) rotateX(-12deg)}.case{position:absolute;inset:0;background:linear-gradient(140deg,#444944,#181c19 48%,#343834);border:3px solid #4b5049;border-radius:48px;box-shadow:inset 0 0 0 5px #232722,inset 0 0 0 7px #555b50;z-index:2;padding:22px 20px}.bezel{height:100%;border:2px solid #697564;border-radius:24px;padding:16px 17px 12px;background:#202521;box-shadow:0 0 0 4px #121812,inset 0 0 0 1px #333d34}.watch-brand{color:#d6ddd0;font-size:18px;font-weight:800;letter-spacing:2px;display:flex;justify-content:space-between;align-items:center}.watch-brand small{font-size:12px;letter-spacing:1px;color:#a8b9a0}.blue-line{border-top:2px solid #82a2ab;margin-top:7px}.screen-wrap{padding:12px 7px;background:#909c86;margin-top:16px;border-radius:8px;box-shadow:inset 0 3px 6px #151f1880;border:3px solid #111910}.screen{width:100%;aspect-ratio:96/40;background:#050806;display:block;image-rendering:pixelated;image-rendering:crisp-edges;filter:sepia(.25)}.screen.off{opacity:.25}.caption{font-size:9px;letter-spacing:1.9px;color:#b2c2a7;text-align:center;margin-top:18px}.face-labels{display:flex;justify-content:space-between;color:#bdc9b6;font-size:9px;letter-spacing:1.6px;margin-top:13px}.face-labels span{font-weight:700}.watch-button{position:absolute;width:28px;height:42px;background:linear-gradient(90deg,#787e76,#dadfd6,#626b61);border:1px solid #464e43;border-radius:6px;z-index:1;cursor:pointer;touch-action:none;box-shadow:0 2px 3px #0005}.watch-button:focus-visible{outline:3px solid #5196b4;outline-offset:5px}.watch-button.a{left:-17px;top:72px}.watch-button.b{left:-17px;bottom:57px}.watch-button.c{right:-17px;bottom:57px}.watch-button.active{background:#81b395;transform:translateX(5px)}.watch-button.c.active{transform:translateX(-5px)}.key-marker{position:absolute;color:#677669;font:12px ui-monospace,monospace;width:30px;left:-36px;top:11px}.c .key-marker{left:auto;right:-38px}.panel{padding:4px 0}.panel h2{font-weight:550;font-size:19px;letter-spacing:-.3px;margin:0 0 9px}.hint{font-size:13px;line-height:1.65;color:#798078;margin:0 0 22px}.binding{display:flex;align-items:center;gap:13px;padding:18px 0;border-top:1px solid #d7dcd2}.binding:last-of-type{border-bottom:1px solid #d7dcd2}.key{width:38px;height:36px;border:1px solid #c3cbbe;border-bottom:3px solid #bbc5b6;border-radius:7px;display:grid;place-items:center;background:#fafbf7;font:15px ui-monospace,monospace;transition:.1s}.binding.active .key{background:#244b3a;border-color:#244b3a;color:#e6f2e7;transform:translateY(2px)}.binding strong{font-size:13px;font-weight:600}.binding small{display:block;color:#7b8478;font-size:11px;margin-top:4px}.state-label{margin-left:auto;font:10px ui-monospace,monospace;color:#879183;text-transform:uppercase;letter-spacing:.7px}.binding.active .state-label{color:#287a53}.footnote{font-size:11px;line-height:1.6;color:#828a7e;margin-top:21px}.console{border-top:1px solid #d5dacd;margin-top:27px;padding:18px 0}.console summary{cursor:pointer;font-size:12px;color:#68725f;list-style:none;display:flex;justify-content:space-between}.console summary::after{content:'＋';font-size:16px}.console[open] summary::after{content:'−'}.console pre{font-size:11px;line-height:1.7;max-height:220px;overflow:auto;background:#e8ebe3;border-radius:6px;padding:16px;white-space:pre-wrap}.error{color:#a94229;font-size:13px;line-height:1.5;white-space:pre-wrap}.footer{display:flex;justify-content:space-between;border-top:1px solid #d8dbd3;padding:22px 0;color:#8a9284;font:10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:1.2px}.mobile-hint{display:none}@media(max-width:820px){header{padding:0 24px}.brand span{display:none}main{padding:35px 25px 20px}h1{font-size:35px}.workspace{grid-template-columns:1fr;gap:20px}.stage{min-height:500px}.watch{transform:scale(.88)}.panel{max-width:450px;width:100%;margin:auto}.footer{margin-top:25px}}@media(max-width:430px){.watch{transform:scale(.74)}.stage{min-height:410px}.workspace{margin-top:10px}.footer{letter-spacing:0;font-size:9px}}
+:root { color-scheme: light; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #262826; background: #edeeeb; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header { height: 56px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d0d3cc; background: #f7f8f4; }
+.brand { font-weight: 650; font-size: 14px; letter-spacing: -.25px; }
+.brand span { color: #81877e; margin-left: 12px; font-weight: 400; }
+.status { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #72776e; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: #a78c53; }
+.live .dot { background: #4f7855; }
+main { max-width: 1180px; margin: auto; padding: 32px 32px 0; }
+.workspace { display: grid; grid-template-columns: minmax(420px, 1fr) 250px; gap: 40px; }
+.stage { position: relative; height: 610px; display: flex; align-items: center; justify-content: center; border: 1px solid #d2d5ce; background: #e4e6e0; overflow: hidden; }
+.stage-meta { position: absolute; top: 17px; left: 19px; right: 19px; display: flex; justify-content: space-between; color: #7a8075; font: 10px ui-monospace, SFMono-Regular, monospace; }
+.stage-note { position: absolute; bottom: 17px; left: 0; right: 0; text-align: center; color: #757c6f; font-size: 11px; }
+.watch { width: 336px; height: 292px; position: relative; flex-shrink: 0; filter: drop-shadow(0 12px 9px #151b161a); }
+.strap { position: absolute; width: 202px; left: 67px; height: 104px; border: 2px solid #252824; background: repeating-linear-gradient(0deg, #272b26 0 19px, #333730 20px, #1e211d 22px); }
+.strap.top { top: -95px; border-radius: 16px 16px 0 0; transform: perspective(300px) rotateX(18deg); }
+.strap.bottom { bottom: -95px; border-radius: 0 0 16px 16px; transform: perspective(300px) rotateX(-18deg); }
+.case { position: absolute; inset: 0; padding: 17px 15px; border: 2px solid #50544b; border-radius: 30px / 35px; background: linear-gradient(150deg, #3b4038, #232720 55%, #30352d); box-shadow: inset 0 0 0 4px #1b2019, inset 0 0 0 6px #44493e; z-index: 2; }
+.bezel { height: 100%; padding: 12px 12px 9px; background: #151c1b; border: 1px solid #4f6067; border-radius: 16px; box-shadow: 0 0 0 2px #171c18, inset 0 0 0 3px #192626, inset 0 0 0 4px #496f7b; }
+.watch-brand { color: #e5e6d9; display: flex; align-items: baseline; justify-content: space-between; padding: 0 3px; font-size: 17px; font-weight: 750; letter-spacing: -.5px; }
+.watch-brand small { color: #c8cba5; font: italic 12px Georgia, serif; letter-spacing: .5px; }
+.face-labels { color: #a4b9b9; font: 8px Arial, sans-serif; letter-spacing: .65px; display: flex; justify-content: space-between; padding: 0 4px; margin: 10px 0 8px; }
+.screen-wrap { padding: 9px 7px; background: #8f9681; border: 2px solid #080d0b; border-radius: 5px; box-shadow: inset 0 1px 4px #262b2590; }
+.screen { display: block; width: 100%; aspect-ratio: 96 / 40; background: #050706; image-rendering: pixelated; }
+.screen.off { opacity: .3; }
+.caption { color: #b7bea8; border-top: 1px solid #4d6567; margin: 10px 3px 0; padding-top: 8px; text-align: center; font: 9px Arial, sans-serif; letter-spacing: 1.8px; }
+.watch-button { position: absolute; width: 28px; height: 38px; border: none; padding: 0; background: transparent; z-index: 1; cursor: pointer; touch-action: none; }
+.watch-button::before { content: ''; position: absolute; inset: 4px 0; background: linear-gradient(90deg, #737870, #b8bdb3 40%, #686e65); border: 1px solid #4e544b; border-radius: 3px; box-shadow: 0 1px 1px #0003; }
+.watch-button.a { left: -17px; top: 54px; }
+.watch-button.b { left: -17px; bottom: 43px; }
+.watch-button.c { right: -17px; bottom: 43px; }
+.watch-button.active { transform: translateX(4px); }
+.watch-button.c.active { transform: translateX(-4px); }
+.watch-button.active::before { background: #9ca995; }
+.watch-button:focus-visible { outline: 2px solid #527f89; outline-offset: 4px; }
+.key-marker { position: absolute; left: -25px; top: 11px; color: #707969; font: 11px ui-monospace, monospace; }
+.c .key-marker { left: auto; right: -25px; }
+.panel { padding-top: 3px; }
+h1 { margin: 0 0 9px; font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+.hint { color: #72786d; font-size: 12px; line-height: 1.6; margin: 0 0 25px; }
+.binding { display: flex; align-items: center; gap: 12px; border-top: 1px solid #d1d5cb; min-height: 69px; }
+.binding:last-of-type { border-bottom: 1px solid #d1d5cb; }
+.key { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #c7cdbf; border-bottom-width: 2px; border-radius: 4px; background: #f7f8f3; font: 12px ui-monospace, monospace; }
+.binding strong { font-size: 12px; font-weight: 550; }
+.binding small { display: block; margin-top: 4px; font: 10px ui-monospace, monospace; color: #868d7d; }
+.state-label { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: #c6cdbf; font-size: 0; }
+.binding.active .state-label { background: #416e4c; }
+.binding.active .key { background: #354b38; border-color: #354b38; color: #f4f6ee; }
+.footnote { color: #818978; font-size: 11px; line-height: 1.65; margin: 19px 0 0; }
+.details { margin-top: 35px; border-top: 1px solid #d1d5cb; padding-top: 15px; }
+summary { cursor: pointer; color: #5e6755; font-size: 11px; }
+.details p { line-height: 1.7; font-size: 11px; color: #7b8570; }
+.error { color: #994c3c; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.error:empty { display: none; }
+.console { margin: 23px 0; border: 1px solid #d0d5c8; background: #f4f6ef; }
+.console summary { padding: 13px 15px; }
+.console pre { margin: 0; border-top: 1px solid #d0d5c8; padding: 16px; max-height: 230px; overflow: auto; font: 11px/1.7 ui-monospace, monospace; white-space: pre-wrap; color: #505c45; }
+footer { display: flex; justify-content: space-between; padding: 0 0 22px; color: #87907c; font: 10px ui-monospace, monospace; }
+@media (max-width: 850px) { header { padding: 0 20px; } main { padding: 20px 20px 0; } .workspace { grid-template-columns: 1fr; gap: 23px; } .stage { height: 500px; } .panel { padding: 0 4px; } .hint { margin-bottom: 13px; } .bindings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; } .binding { gap: 8px; border-bottom: 1px solid #d1d5cb; } .binding strong { font-size: 11px; } .binding small { font-size: 9px; } .state-label { display: none; } .footnote { margin-top: 12px; } .details { margin-top: 16px; } }
+@media (max-width: 460px) { .brand span { margin-left: 8px; } .watch { transform: scale(.82); } .stage { height: 430px; } main { padding: 12px 12px 0; } .bindings { gap: 9px; } .binding { gap: 6px; } .binding small { display: none; } .key { width: 24px; height: 26px; } header { padding: 0 15px; } }
 </style>
 </head>
 <body>
-<header><div class="brand">F91 JEPLER <span>DEVELOPMENT LAB</span></div><div class="status" id="status"><span class="dot"></span><span id="status-text">BOOTING</span></div></header>
-<main><div class="eyebrow">Hardware, on your desktop</div><h1>Your watch. In motion.</h1><p class="intro">A live view of your firmware running in Renode. Press the case buttons or use your keyboard to interact with the watch.</p>
-<div class="workspace"><div class="stage"><div class="watch"><div class="strap top"></div><div class="strap bottom"></div>
-<button class="watch-button a" data-key="1" aria-label="Button A, top left, keyboard 1" aria-pressed="false"><span class="key-marker">1</span></button>
-<button class="watch-button b" data-key="2" aria-label="Button B, bottom left, keyboard 2" aria-pressed="false"><span class="key-marker">2</span></button>
-<button class="watch-button c" data-key="3" aria-label="Button C, bottom right, keyboard 3" aria-pressed="false"><span class="key-marker">3</span></button>
-<div class="case"><div class="bezel"><div class="watch-brand">JEPLER <small>F–91</small></div><div class="blue-line"></div><div class="face-labels"><span>◀ A</span><span>SMART WATCH</span></div><div class="screen-wrap"><canvas class="screen off" id="screen" width="96" height="40" aria-label="Live emulated OLED display"></canvas></div><div class="face-labels"><span>◀ B</span><span>C ▶</span></div><div class="caption">nRF52840 · ZEPHYR</div></div></div></div></div>
-<section class="panel"><div class="eyebrow" style="margin-bottom:13px">Three buttons. Full control.</div><h2>Meet your controls</h2><p class="hint">Click and hold a side button, or hold a number key. Release it to release the watch button.</p>
-<div class="binding" data-key="1"><span class="key">1</span><div><strong>A · Top left</strong><small id="pin-1">Connecting to firmware…</small></div><span class="state-label">Released</span></div>
-<div class="binding" data-key="2"><span class="key">2</span><div><strong>B · Bottom left</strong><small id="pin-2">Connecting to firmware…</small></div><span class="state-label">Released</span></div>
-<div class="binding" data-key="3"><span class="key">3</span><div><strong>C · Bottom right</strong><small id="pin-3">Connecting to firmware…</small></div><span class="state-label">Released</span></div>
-<p class="footnote">Buttons release automatically when this window loses focus. GPIO bindings follow the firmware’s emulation overlay; custom PCB pins are not yet specified.</p><p class="error" id="error" role="alert"></p>
-<details class="console"><summary>Firmware console</summary><pre id="uart">Waiting for MCUboot…</pre></details></section></div>
-<footer class="footer"><span>Real firmware · Live pixels</span><span>96 × 40 OLED / Renode</span></footer></main>
+<header>
+  <div class="brand">f91_jepler <span>Emulator</span></div>
+  <div class="status" id="status"><span class="dot"></span><span id="status-text">Starting…</span></div>
+</header>
+<main>
+  <div class="workspace">
+    <div class="stage">
+      <div class="stage-meta"><span>F91 / FRONT</span><span>96 × 40</span></div>
+      <div class="watch">
+        <div class="strap top"></div><div class="strap bottom"></div>
+        <button class="watch-button a" data-key="1" aria-label="Button A, top left, keyboard 1" aria-pressed="false"><span class="key-marker">1</span></button>
+        <button class="watch-button b" data-key="2" aria-label="Button B, bottom left, keyboard 2" aria-pressed="false"><span class="key-marker">2</span></button>
+        <button class="watch-button c" data-key="3" aria-label="Button C, bottom right, keyboard 3" aria-pressed="false"><span class="key-marker">3</span></button>
+        <div class="case"><div class="bezel">
+          <div class="watch-brand">JEPLER <small>F-91</small></div>
+          <div class="face-labels"><span>◀ A</span><span>OLED</span></div>
+          <div class="screen-wrap"><canvas class="screen off" id="screen" width="96" height="40" aria-label="Live emulated OLED display"></canvas></div>
+          <div class="face-labels"><span>◀ B</span><span>C ▶</span></div>
+          <div class="caption">F91 JEPLER</div>
+        </div></div>
+      </div>
+      <div class="stage-note">Click a button or use keys 1, 2, 3.</div>
+    </div>
+    <section class="panel" aria-label="Emulator controls">
+      <h1>Controls</h1>
+      <p class="hint">Hold to press. Let go to release.</p>
+      <div class="bindings">
+        <div class="binding" data-key="1"><kbd class="key">1</kbd><div><strong>A · Top left</strong><small id="pin-1">Connecting…</small></div><span class="state-label">Released</span></div>
+        <div class="binding" data-key="2"><kbd class="key">2</kbd><div><strong>B · Bottom left</strong><small id="pin-2">Connecting…</small></div><span class="state-label">Released</span></div>
+        <div class="binding" data-key="3"><kbd class="key">3</kbd><div><strong>C · Bottom right</strong><small id="pin-3">Connecting…</small></div><span class="state-label">Released</span></div>
+      </div>
+      <p class="footnote">Switching away from this window releases all buttons.</p>
+      <details class="details"><summary>Hardware configuration</summary><p>nRF52840 · Zephyr · MCUboot<br>SSD1306-compatible display on I²C 0x3C.</p><p>Button pins follow the firmware’s emulation overlay. Custom PCB assignments are not yet specified.</p></details>
+      <p class="error" id="error" role="alert"></p>
+    </section>
+  </div>
+  <details class="console"><summary>UART console</summary><pre id="uart">Waiting for MCUboot…</pre></details>
+  <footer><span>Renode</span><span>Local emulation</span></footer>
+</main>
 <script>
 const pressedKeys=new Set(), pointerKeys=new Map();let ready=false, frameNumber=-1, queue=Promise.resolve();
 const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
@@ -41,7 +127,7 @@ window.addEventListener('keydown',e=>{const key=keyFor(e);if(!ready||!key||e.met
 window.addEventListener('keyup',e=>{const key=keyFor(e);if(key){e.preventDefault();pressedKeys.delete(key);send()}});
 window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll()});window.addEventListener('pagehide',()=>{fetch('/api/input',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Watch-UI':'1'},body:'{"pressed":[]}'}).catch(()=>{})});
 setInterval(()=>{if(ready&&!document.hidden&&document.hasFocus())send()},500);
-async function update(){try{const response=await fetch('/api/state');if(!response.ok)throw Error('Viewer disconnected');const state=await response.json();ready=state.ready;document.getElementById('status').classList.toggle('live',ready);document.getElementById('status-text').textContent=state.error?'CONNECTION ERROR':ready?'LIVE EMULATION':'BOOTING';document.getElementById('error').textContent=state.error;document.getElementById('uart').textContent=state.uart||'Waiting for MCUboot…';for(const b of state.buttons)document.getElementById('pin-'+b.key).textContent=`P${b.port.slice(-1)}.${String(b.pin).padStart(2,'0')} · ${b.active_low?'Active low':'Active high'}`;
+async function update(){try{const response=await fetch('/api/state');if(!response.ok)throw Error('Viewer disconnected');const state=await response.json();ready=state.ready;document.getElementById('status').classList.toggle('live',ready);document.getElementById('status-text').textContent=state.error?'Connection error':ready?'Running':'Starting…';document.getElementById('error').textContent=state.error;document.getElementById('uart').textContent=state.uart||'Waiting for MCUboot…';for(const b of state.buttons)document.getElementById('pin-'+b.key).textContent=`P${b.port.slice(-1)}.${String(b.pin).padStart(2,'0')} · ${b.active_low?'Active low':'Active high'}`;
  if(state.frame!==frameNumber&&ready){frameNumber=state.frame;const image=new Image();image.src='/frame.png?v='+frameNumber;await image.decode();ctx.drawImage(image,0,0);canvas.classList.remove('off')}
-}catch(error){ready=false;document.getElementById('status').classList.remove('live');document.getElementById('status-text').textContent='DISCONNECTED';document.getElementById('error').textContent='The emulator connection stopped. Restart the watch viewer from Terminal.';pressedKeys.clear();pointerKeys.clear();paintInput()}finally{setTimeout(update,100)}}update();
+}catch(error){ready=false;document.getElementById('status').classList.remove('live');document.getElementById('status-text').textContent='Disconnected';document.getElementById('error').textContent='The emulator connection stopped. Restart the watch viewer from Terminal.';pressedKeys.clear();pointerKeys.clear();paintInput()}finally{setTimeout(update,100)}}update();
 </script></body></html>
