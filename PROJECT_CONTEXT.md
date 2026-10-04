@@ -2,6 +2,17 @@
 
 This file preserves the original user prompt, design goals, and architectural decisions made during the initial planning phase of the `f91_jepler` project. It is intended to provide full context to future AI agents or contributors working on the repository.
 
+## Current decisions — 2026-10-03
+
+These supersede conflicting battery, package, fit and charging assumptions in the historical prompt below:
+
+- Create the redesign in KiCad, retaining the legacy CC2640 DipTrace files.
+- Use nRF52840-QIAA (AQFN73) for the initial draft and an external 32.768 kHz crystal.
+- Replace the rechargeable coin-cell idea with a protected LiPo secured to the board assembly; exact cell is not selected.
+- Preserve the bracket as a reference. The user has no physical bracket available, so battery fit, bracket geometry and continuity remain provisional.
+- Do not treat the bracket or buttons as proven charging contacts. No verified short-circuit-proof charging design exists.
+- [KiCad A0](Hardware/KiCad/drafts/f91_jepler/README.md) is an unrouted core/placement draft, not a complete or manufacturing-ready watch board.
+
 ---
 
 ## Original User Request & Design Goals

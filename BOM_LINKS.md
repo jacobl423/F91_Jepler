@@ -4,7 +4,7 @@ Below is the list of core components required for the f91_jepler hardware redesi
 
 ### 1. Microcontroller (MCU)
 *   **Part:** Nordic Semiconductor **nRF52840-QIAA** 
-    *   *(Note: The hardware brief mentions a 6x6mm QFN48, but QIAA is typically a 7x7mm AQFN73 package. Double-check the intended footprint during schematic capture).*
+    *   **A0 draft package:** 7 × 7 mm AQFN73. This supersedes the older QFN48 brief.
 *   **Description:** The "brain" of the watch. ARM Cortex-M4F, Bluetooth Low Energy, 1MB Flash, and 256KB RAM. Replaces the CC2640R2F.
 *   **Estimated Price:** $5.00
 *   **Buy Link:** [Digi-Key: nRF52840](https://www.digikey.com/en/products/filter/rf-transceiver-ics/650?s=N4IgjCBcpgHAzFUBjKAzAhgGwM4FMAaEAeygG0QAWbAVhAF0CAHFSABwDYSB2AdgE4sAJlRoM2fMUKEQnbL36DhYiVPlKpQA)
@@ -12,8 +12,11 @@ Below is the list of core components required for the f91_jepler hardware redesi
 ### 2. Clocking / Crystals
 *   **Part:** 32 MHz High-Frequency Crystal
     *   **Description:** Main MCU clock compatible with Nordic reference design.
-*   **Part:** 32.768 kHz Low-Frequency Crystal
-    *   **Description:** For RTC / precise timekeeping.
+*   **Part:** Abracon **ABS07-32.768KHZ-7-T**, quantity 1 (selected for the redesign)
+    *   **Specification:** 32.768 kHz, 7 pF load, ±20 ppm initial tolerance at 25°C, 3.2 × 1.5 × 0.9 mm.
+    *   **Datasheet:** [Abracon ABS07](https://abracon.com/Resonators/ABS07.pdf)
+    *   **Passives:** Two equal C0G/NP0 load capacitors; values depend on PCB parasitics and require finalization.
+    *   **Connections/layout:** [Clocking requirements](Hardware/CLOCKING.md). This specifies the new nRF board; legacy CC2640 PCB files are unchanged.
 
 ### 3. Display
 *   **Part:** 0.83-inch Monochrome OLED Display Module (Blue on Black)
@@ -26,7 +29,7 @@ Below is the list of core components required for the f91_jepler hardware redesi
 *   **Battery Part:** Small Rechargeable 1-cell 3.7V Li-ion/LiPo Battery
     *   **Description:** Pouch cell to replace the disposable CR2016. Exact model to be selected after measuring available F91W internal space. Prefer protected battery.
 *   **Charger IC:** Texas Instruments **BQ25100**
-    *   **Description:** Very small (1.6x0.9 mm) single-cell Li-ion/LiPo charger supporting 4.2V termination. Will be programmed for ~10mA charging current. Replaces the previous coin cell LDO setup.
+    *   **Description:** Very small (1.6x0.9 mm) single-cell Li-ion/LiPo charger supporting 4.2V termination. Charge current remains provisional until the cell specification is selected; ~10mA is only a planning value. The KiCad A0 draft does not yet implement this charger. Replaces the previous coin cell LDO setup.
     *   **Estimated Price:** ~$1.50
     *   **Buy Link:** [Digi-Key: BQ25100](https://www.digikey.com/en/products/filter/pmic-battery-chargers/781?s=N4IgjCBcpgHAzFUBjKAzAhgGwM4FMAaEAeygG0QAWbAVhAF0CAHFSABwDYSB2AdgE4sAJlRoM2fMUIgADADYZU2Ttlz9hw3oIkiJUtVpA)
 

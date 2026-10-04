@@ -4,7 +4,7 @@
 
 The **f91_jepler** is a complete redesign and evolution of the classic Casio F91W watch, inspired by the original [F91 Kepler](https://github.com/drpykachu/F91_Kepler) project. This project completely replaces the original internals of the watch, keeping only the original resin case and buttons, while adding an OLED display, a powerful Bluetooth-capable MCU, and a rechargeable battery system.
 
-While the original Kepler proved the mechanical concept, the f91_jepler fundamentally upgrades the processing power and introduces a highly experimental, short-circuit-proof external charging mechanism that requires zero case modifications.
+The redesign is in progress. The original Kepler hardware is a mechanical reference; fit and charging arrangements for the new nRF52840 board are not yet verified.
 
 <p align="center">
   <img src="Hardware/images/main.jpg" alt="Main view" width="600"/>
@@ -12,17 +12,18 @@ While the original Kepler proved the mechanical concept, the f91_jepler fundamen
 
 ## Hardware Upgrades & Architecture
 
-We have completely redesigned the core architecture to turn this into a modern, highly hackable smartwatch platform:
+The [KiCad A0 draft](Hardware/KiCad/drafts/f91_jepler/README.md) contains the MCU core and provisional component placement. It is not ready for fabrication.
 
-- **MCU:** Upgraded from the TI CC2640R2F to the **Nordic nRF52840 (QFN48)**. This provides a massive leap in resources (1MB Flash, 256KB RAM) and allows us to use the Zephyr RTOS ecosystem.
-- **Display:** Retained the **0.83" Monochrome OLED (SSD1306, 96x39)**. This ensures a perfect mechanical fit in the F91W case and draws incredibly low power, allowing both the MCU and display to run natively off the discharging battery without needing a bulky buck-boost regulator.
-- **Sensors:** Added a tiny 2x2mm ultra-low-power accelerometer (Bosch BMA400 or ST LIS2DW12) for step counting and tap/raise-to-wake gesture detection.
-- **Battery:** Upgraded from a disposable CR2016 to a **rechargeable ML2016** (Lithium Manganese Dioxide) coin cell.
+- **MCU:** Nordic nRF52840-QIAA, 7 × 7 mm AQFN73, with 1 MB flash and 256 KB RAM.
+- **Display:** Target SSD1306 96 × 39 OLED. Physical connector, supply and SPI/I2C variant remain to be verified; Renode currently uses I2C.
+- **Battery:** A small protected single-cell LiPo secured to the assembly replaces the earlier rechargeable coin-cell plan. Exact cell and fit remain provisional.
+- **Power:** The draft includes a 3.0 V regulator. Onboard charging, charge/load management and the charging connector still need design work.
+- **Timekeeping:** External 32.768 kHz crystal feeding the nRF52840 RTC; see [clock circuit requirements](Hardware/CLOCKING.md).
+- **Sensors:** An accelerometer and external flash remain optional; neither is included in A0.
 
-### Novel Charging System Explorations
-To achieve a rechargeable design without drilling holes in the classic Casio case, the f91_jepler is exploring two primary charging architectures that use the external watch buttons as charging contacts:
-* **Option A (The "Floating Button" Architecture):** Discard the original Casio metal internal cage entirely and use an SMD battery retainer. This leaves the watch's external stainless steel buttons electrically floating. The PCB uses split (interdigitated) edge pads that the buttons bridge when pushed, allowing a dock to apply 5V to one button and GND to another safely. **Warning:** Without the metal cage, there are no leaf springs to "unpress" the buttons, meaning they will feel mushy and likely get stuck inward.
-* **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This isolates two of the buttons from the battery positive (VCC), allowing them to act as separate charging contacts while retaining the original mechanical spring tension provided by the cage (solving the issue in Option A).
+### Bracket and charging contacts
+
+Retain the original bracket as the mechanical reference. Its continuity, spring geometry, insulation and clearance around a new battery have not been measured. The user does not currently have it available, so those aspects remain provisional. The draft does not connect the bracket to a battery or charging net. Earlier split-cage and button-charging ideas in the historical project context are not approved electrical designs.
 
 ## Software Architecture
 
@@ -31,10 +32,10 @@ Moving to the nRF52840 means the original Texas Instruments SimpleLink firmware 
 - **SMP Server:** Allows for safe, dual-bank Over-The-Air (OTA) Device Firmware Updates (DFU) directly from a smartphone, so the watch never needs to be opened for programming once flashed.
 
 ## Current Project Status
-- **Mechanicals:** Verified (fits original movement holder constraints).
-- **Architecture:** Finalized (MCU, Display, Power, and Button charging solved).
-- **Schematic & PCB:** Pending / In Progress.
-- **Firmware:** Pending / In Progress.
+
+- **Mechanicals:** Provisional outline and battery envelope; bracket fit unverified.
+- **Schematic & PCB:** Editable [KiCad draft](Hardware/KiCad/drafts/f91_jepler/f91_jepler.kicad_pro), with unrouted placement and documented remaining work. Original DipTrace files retained.
+- **Firmware:** Zephyr and MCUboot run in Renode; see [emulation instructions](Firmware/renode/README.md). Simulation does not validate the physical board.
 
 ## Collaboration and Setup
 Welcome collaborators! To get started with the repository, follow these steps:
