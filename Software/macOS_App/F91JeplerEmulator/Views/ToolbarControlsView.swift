@@ -4,8 +4,8 @@ public struct ToolbarControlsView: View {
     @ObservedObject var session: EmulatorSession
     
     public var body: some View {
-        HStack(spacing: 16) {
-            // Status indicator
+        HStack(spacing: 14) {
+            // Renode Status Indicator
             HStack(spacing: 6) {
                 Circle()
                     .fill(session.isRunning ? Color.green : Color.red)
@@ -17,17 +17,18 @@ public struct ToolbarControlsView: View {
             
             Divider().frame(height: 16)
             
-            // View Mode Picker
-            Picker("View Mode", selection: $session.selectedViewMode) {
+            // View Mode Selector with Icons
+            Picker("Mode", selection: $session.selectedViewMode) {
                 ForEach(ViewMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+                    Label(mode.rawValue, systemImage: mode.iconName).tag(mode)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
+            .frame(width: 175)
             
             Divider().frame(height: 16)
             
-            // Start / Stop Emulation Toggle Button
+            // Start / Stop Simulation
             Button(action: {
                 if session.isRunning {
                     session.stopSession()
@@ -44,7 +45,7 @@ public struct ToolbarControlsView: View {
             .font(.system(size: 11))
             .foregroundColor(session.isRunning ? .red : .green)
             
-            // Cold Reboot Button
+            // Cold Reboot Machine Button
             Button(action: { session.rebootMachine() }) {
                 Label("Reboot", systemImage: "arrow.counterclockwise")
             }
@@ -52,12 +53,43 @@ public struct ToolbarControlsView: View {
             .font(.system(size: 11))
             .disabled(!session.isRunning)
             
-            // Configure Hardware Button
+            // Quick Button Hotkey Legend Badge
+            HStack(spacing: 4) {
+                KeyLegendBadge(key: "L", label: "Light")
+                KeyLegendBadge(key: "M", label: "Mode")
+                KeyLegendBadge(key: "A/␣", label: "Toggle")
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(6)
+            
+            Divider().frame(height: 16)
+            
+            // Configure Hardware Sheet
             Button(action: { session.showSetupSheet = true }) {
-                Label("Configure Hardware & OS", systemImage: "gearshape")
+                Label("Configure Workbench", systemImage: "gearshape")
             }
             .buttonStyle(.borderless)
             .font(.system(size: 11))
+        }
+    }
+}
+
+struct KeyLegendBadge: View {
+    let key: String
+    let label: String
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(key)
+                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .padding(.horizontal, 3)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(3)
+            Text(label)
+                .font(.system(size: 9.5))
+                .foregroundColor(.secondary)
         }
     }
 }

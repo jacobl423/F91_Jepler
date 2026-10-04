@@ -5,10 +5,21 @@ public struct RenodeScriptGenerator {
         appBinPath: String,
         bootloaderPath: String?,
         uartPort: UInt16,
+        uartLogPath: String,
         ssd1306CsPath: String?
     ) -> String {
         var script = """
-        mach create
+        using sysbus
+        $app_bin?=@\(appBinPath)
+        """
+        
+        if let bl = bootloaderPath, !bl.isEmpty, FileManager.default.fileExists(atPath: bl) {
+            script += "\n$mcuboot_bin?=@\(bl)"
+        }
+        
+        script += """
+        \n$name?="nRF52840"
+        mach create $name
         machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
         """
         
@@ -19,20 +30,23 @@ public struct RenodeScriptGenerator {
         
         script += """
         \nmachine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
-        sysbus WriteDoubleWord 0x10000010 0x00001000
-        sysbus WriteDoubleWord 0x10000014 0x00000100
-        emulation CreateServerSocketTerminal \(uartPort) "uart_term" false
-        connector Connect sysbus.uart0 uart_term
-        machine StartGDBServer 3333
+        sysbus.uart0 CreateFileBackend @\(uartLogPath) true
+        
+        macro reset
+        \"\"\"
+            sysbus WriteDoubleWord 0x10000010 0x00001000
+            sysbus WriteDoubleWord 0x10000014 0x00000100
         """
         
-        if let bl = bootloaderPath, !bl.isEmpty {
-            script += "\nsysbus LoadELF @\(bl)"
+        if let bl = bootloaderPath, !bl.isEmpty, FileManager.default.fileExists(atPath: bl) {
+            script += "\n    sysbus LoadELF $mcuboot_bin"
         }
         
         script += """
-        \nsysbus LoadBinary @\(appBinPath) 0xc000
-        start
+        \n    sysbus LoadBinary $app_bin 0x0c000
+        \"\"\"
+        
+        runMacro $reset
         """
         
         return script

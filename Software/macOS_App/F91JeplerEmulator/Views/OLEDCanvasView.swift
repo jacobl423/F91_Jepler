@@ -1,0 +1,149 @@
+import SwiftUI
+import CoreGraphics
+
+public struct OLEDCanvasView: View {
+    @ObservedObject var session: EmulatorSession
+    
+    public init(session: EmulatorSession) {
+        self.session = session
+    }
+    
+    public var body: some View {
+        VStack(spacing: 8) {
+            // Display Toolbar (Theme picker, Grid toggle, Statistics)
+            HStack(spacing: 12) {
+                Picker("OLED Color Theme", selection: $session.oledTheme) {
+                    ForEach(OLEDTheme.allCases) { theme in
+                        Text(theme.rawValue).tag(theme)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 170)
+                
+                Toggle("Pixel Grid Mesh", isOn: $session.showPixelGridMesh)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 11))
+                
+                Spacer()
+                
+                // Real-time FPS & Draw Call Metrics
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Text("FPS:")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Text(String(format: "%.1f", session.displayMetrics.fps))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(session.displayMetrics.fps > 5 ? .green : .orange)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text("Frames:")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Text("\(session.displayMetrics.frameCount)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text("Draw Calls:")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Text("\(session.displayMetrics.drawCallCount)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text("Lit:")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Text("\(session.displayMetrics.litPixelCount)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(.cyan)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            
+            // OLED Canvas Frame
+            ZStack {
+                // Background Glass
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(session.oledTheme.unlitColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(session.oledTheme.bezelBorderColor, lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(0.8), radius: 8, x: 0, y: 4)
+                
+                if let cgImg = session.oledImage {
+                    // Crisp integer nearest-neighbor pixel rendering
+                    Image(decorative: cgImg, scale: 1.0)
+                        .resizable()
+                        .interpolation(.none)
+                        .colorMultiply(session.oledTheme.litColor)
+                        .aspectRatio(96.0 / 39.0, contentMode: .fit)
+                        .padding(12)
+                        .overlay(
+                            Group {
+                                if session.showPixelGridMesh {
+                                    PixelGridOverlay(width: 96, height: 39)
+                                        .padding(12)
+                                }
+                            }
+                        )
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: "display")
+                            .font(.system(size: 28))
+                            .foregroundColor(session.oledTheme.litColor.opacity(0.6))
+                        Text("96 × 39 SSD1306 OLED")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(session.oledTheme.litColor)
+                        Text(session.isRunning ? "Ingesting I2C Framebuffer (0x3C)..." : "Renode Emulation Inactive")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(10)
+        }
+        .background(Color(red: 0.08, green: 0.09, blue: 0.1))
+    }
+}
+
+public struct PixelGridOverlay: View {
+    let width: Int
+    let height: Int
+    
+    public var body: some View {
+        Canvas { context, size in
+            let stepX = size.width / CGFloat(width)
+            let stepY = size.height / CGFloat(height)
+            
+            var path = Path()
+            // Subtle horizontal pixel lines
+            for y in 0...height {
+                let yPos = CGFloat(y) * stepY
+                path.move(to: CGPoint(x: 0, y: yPos))
+                path.addLine(to: CGPoint(x: size.width, y: yPos))
+            }
+            // Subtle vertical pixel lines
+            for x in 0...width {
+                let xPos = CGFloat(x) * stepX
+                path.move(to: CGPoint(x: xPos, y: 0))
+                path.addLine(to: CGPoint(x: xPos, y: size.height))
+            }
+            context.stroke(path, with: .color(Color.black.opacity(0.25)), lineWidth: 0.5)
+        }
+        .allowsHitTesting(false)
+    }
+}

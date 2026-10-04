@@ -76,7 +76,7 @@ class Watch:
         self.out = ROOT/'build/renode'/('watch-' + time.strftime('%Y%m%d-%H%M%S') + '-' + str(os.getpid()))
         self.out.mkdir(parents=True)
         (self.out/'tmp').mkdir()
-        (self.out/'renode.config').write_text('[general]\nhistory-path = ' + str(self.out/'history') + '\n')
+        (self.out/'renode.config').write_text('[general]\nhistory-path = ' + str(self.out/'history') + '\n\n[tlib]\ntranslation-cache-size = 134217728\n')
         (self.out/'watch.resc').write_text(
             '$app_bin=@' + str(ROOT/'build/renode-app/app.signed.bin') + '\n'
             'include @' + str(ROOT/'Firmware/renode/f91_jepler.resc') + '\n'

@@ -10,13 +10,22 @@ public struct ContentView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Main Content Body based on ViewMode
+            // Main Content Body based on selected ViewMode
             HSplitView {
-                // Left Panel: Watch UI or KiCad PCB
+                // Left Panel: Dynamic Workbench View
                 VStack(spacing: 0) {
                     switch session.selectedViewMode {
                     case .watch:
-                        WatchFaceView(session: session)
+                        CasioWatchFrameView(session: session)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .canvas:
+                        OLEDCanvasView(session: session)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .gatt:
+                        GATTTestInjectorView(session: session)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .test:
+                        AutomatedTestRunnerView(session: session)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     case .pcb:
                         KiCadPcbView(session: session)
@@ -27,38 +36,26 @@ public struct ContentView: View {
                     case .split:
                         ResizableVSplitView(
                             topHeight: $session.watchPanelHeight,
-                            minTopHeight: 110,
-                            maxTopHeight: 420
-                        ) {
-                            WatchFaceView(session: session)
-                        } bottom: {
-                            KiCadPcbView(session: session)
-                        }
-                    }
-                }
-                .frame(minWidth: 380, idealWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
-                
-                // Right Panel: Monospaced UART Terminal & GDB Register Inspector
-                VStack(spacing: 0) {
-                    if session.selectedViewMode == .split {
-                        ResizableVSplitView(
-                            topHeight: $session.terminalPanelHeight,
-                            minTopHeight: 140,
+                            minTopHeight: 280,
                             maxTopHeight: 520
                         ) {
-                            TerminalView(session: session)
+                            CasioWatchFrameView(session: session)
                         } bottom: {
-                            GDBInspectorView(session: session)
+                            GATTTestInjectorView(session: session)
                         }
-                    } else {
-                        TerminalView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .frame(minWidth: 360, idealWidth: 550, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 420, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Right Panel: Monospaced UART Terminal with ANSI Colors, Filtering, and Inspection
+                VStack(spacing: 0) {
+                    TerminalView(session: session)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(minWidth: 380, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
             }
             
-            // Error Banner
+            // Error / Warning Banner
             if let err = session.errorMessage {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -71,7 +68,7 @@ public struct ContentView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.red.opacity(0.15))
+                .background(Color.red.opacity(0.18))
             }
         }
         .overlay(
@@ -85,7 +82,7 @@ public struct ContentView: View {
                                 Image(systemName: "square.and.arrow.down")
                                     .font(.system(size: 36))
                                     .foregroundColor(.accentColor)
-                                Text("Drop KiCad PCB file to test draft")
+                                Text("Drop KiCad PCB or Firmware file to test")
                                     .font(.system(size: 16, weight: .bold))
                             }
                         )
@@ -95,9 +92,20 @@ public struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: $session.isTargetedForDrop) { providers in
             guard let provider = providers.first else { return false }
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                if let url = url, url.pathExtension.lowercased() == "kicad_pcb" {
-                    Task { @MainActor in
+                guard let url = url else { return }
+                Task { @MainActor in
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "kicad_pcb" {
                         session.customPCBURL = url
+                        session.startSession()
+                    } else if ext == "bin" || ext == "hex" {
+                        session.customAppBinURL = url
+                        session.startSession()
+                    } else if ext == "elf" {
+                        session.customBootloaderURL = url
+                        session.startSession()
+                    } else if ext == "resc" {
+                        session.customRescURL = url
                         session.startSession()
                     }
                 }
@@ -204,4 +212,3 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
         }
     }
 }
-

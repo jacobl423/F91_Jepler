@@ -1,6 +1,14 @@
 // swift-tools-version:5.9
 import PackageDescription
 
+import Foundation
+
+var swiftSettings: [SwiftSetting] = []
+let xcodePluginDir = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+if FileManager.default.fileExists(atPath: xcodePluginDir) {
+    swiftSettings.append(.unsafeFlags(["-plugin-path", xcodePluginDir]))
+}
+
 let package = Package(
     name: "F91JeplerEmulator",
     platforms: [
@@ -20,7 +28,8 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Embedded")
-            ]
+            ],
+            swiftSettings: swiftSettings
         )
     ],
     swiftLanguageVersions: [.v5]

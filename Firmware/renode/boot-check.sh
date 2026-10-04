@@ -20,6 +20,9 @@ export TMPDIR="$out/tmp"
 cat > "$out/renode.config" <<EOF
 [general]
 history-path = $out/history
+
+[tlib]
+translation-cache-size = 134217728
 EOF
 cat > "$out/boot.resc" <<EOF
 \$mcuboot_bin=@$root/bin/mcuboot.elf

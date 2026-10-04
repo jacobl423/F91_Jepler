@@ -30,6 +30,21 @@ public enum ResourceLoader {
                 return candidate3
             }
         }
+        
+        // 5. FileSystem relative to current working directory (workspace dev mode)
+        let cwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let repoCandidates = [
+            cwdURL.appendingPathComponent("build/renode-app").appendingPathComponent("\(name).\(ext)"),
+            cwdURL.appendingPathComponent("bin").appendingPathComponent("\(name).\(ext)"),
+            cwdURL.appendingPathComponent("Firmware/renode").appendingPathComponent("\(name).\(ext)"),
+            cwdURL.appendingPathComponent("Software/macOS_App/F91JeplerEmulator/Resources/Embedded").appendingPathComponent("\(name).\(ext)")
+        ]
+        for candidate in repoCandidates {
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        
         return nil
     }
     

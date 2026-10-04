@@ -68,3 +68,8 @@ bin/
 # Swift / macOS App Build Output
 Software/macOS_App/.build/
 Software/macOS_App/build/
+
+# Feature Ideas & Planning Notes
+feature_ideas.md
+feature_ideas/
+*feature_ideas*

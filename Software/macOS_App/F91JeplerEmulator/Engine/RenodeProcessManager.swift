@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 public final class RenodeProcessManager {
     public private(set) var process: Process?
@@ -8,9 +9,21 @@ public final class RenodeProcessManager {
     public private(set) var outputPipe = Pipe()
     public var onOutputReceived: ((String) -> Void)?
     
-    public init() {}
+    public init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.stop()
+        }
+    }
     
-    public static func findRenodeExecutable() -> String? {
+    public static func findRenodeExecutable(customPath: String? = nil) -> String? {
+        if let custom = customPath, !custom.isEmpty, FileManager.default.fileExists(atPath: custom) {
+            return custom
+        }
+        
         let defaultPath = "/Applications/Renode.app/Contents/MacOS/renode"
         if FileManager.default.fileExists(atPath: defaultPath) {
             return defaultPath
@@ -27,13 +40,24 @@ public final class RenodeProcessManager {
         return nil
     }
     
+    public static func cleanupStaleRenodeProcesses() {
+        // Gracefully kill previous hanging renode processes
+        let killProc = Process()
+        killProc.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        killProc.arguments = ["-9", "-f", "renode.*f91"]
+        try? killProc.run()
+        killProc.waitUntilExit()
+    }
+    
     public func start(
         appBinURL: URL,
         bootloaderURL: URL?,
         ssd1306CsURL: URL?,
-        renodePath: String
+        renodePath: String,
+        customRescURL: URL? = nil
     ) throws -> (port: UInt16, uartPort: UInt16) {
         stop()
+        Self.cleanupStaleRenodeProcesses()
         
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("f91_renode_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -70,17 +94,36 @@ public final class RenodeProcessManager {
         let uartPort = ports.count > 1 ? ports[1] : 1240
         self.port = freePort
         
-        let rescContent = RenodeScriptGenerator.generateResc(
-            appBinPath: localAppBin.path,
-            bootloaderPath: localBootloader?.path,
-            uartPort: uartPort,
-            ssd1306CsPath: localSSD1306?.path
-        )
+        let uartLogFile = tempDir.appendingPathComponent("uart.log")
+        self.uartLogURL = uartLogFile
         
         let rescFile = tempDir.appendingPathComponent("session.resc")
-        try rescContent.write(to: rescFile, atomically: true, encoding: .utf8)
+        if let customResc = customRescURL, FileManager.default.fileExists(atPath: customResc.path) {
+            let customContent = try String(contentsOf: customResc, encoding: .utf8)
+            var patched = customContent
+            // Replace relative paths with absolute/copied paths if needed
+            patched = "$mcuboot_bin?=@\(localBootloader?.path ?? "")\n$app_bin?=@\(localAppBin.path)\n" + patched
+            patched += "\nsysbus.uart0 CreateFileBackend @\(uartLogFile.path) true\n"
+            try patched.write(to: rescFile, atomically: true, encoding: .utf8)
+        } else {
+            let rescContent = RenodeScriptGenerator.generateResc(
+                appBinPath: localAppBin.path,
+                bootloaderPath: localBootloader?.path,
+                uartPort: uartPort,
+                uartLogPath: uartLogFile.path,
+                ssd1306CsPath: localSSD1306?.path
+            )
+            try rescContent.write(to: rescFile, atomically: true, encoding: .utf8)
+        }
         
-        let configContent = "[general]\nhistory-path = \(tempDir.appendingPathComponent("history").path)\n"
+        let configContent = """
+        [general]
+        history-path = \(tempDir.appendingPathComponent("history").path)
+
+        [tlib]
+        translation-cache-size = 134217728
+
+        """
         let configFile = tempDir.appendingPathComponent("renode.config")
         try configContent.write(to: configFile, atomically: true, encoding: .utf8)
         
@@ -119,7 +162,15 @@ public final class RenodeProcessManager {
         outputPipe.fileHandleForReading.readabilityHandler = nil
         if let proc = process, proc.isRunning {
             proc.terminate()
-            proc.waitUntilExit()
+            
+            // Wait up to 1.0 second, then force kill
+            let startTime = Date()
+            while proc.isRunning && Date().timeIntervalSince(startTime) < 1.0 {
+                usleep(50000)
+            }
+            if proc.isRunning {
+                kill(proc.processIdentifier, SIGKILL)
+            }
         }
         process = nil
         
