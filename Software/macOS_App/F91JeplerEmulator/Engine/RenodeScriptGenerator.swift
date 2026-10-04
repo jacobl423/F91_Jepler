@@ -21,7 +21,7 @@ public struct RenodeScriptGenerator {
         \nmachine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
         sysbus WriteDoubleWord 0x10000010 0x00001000
         sysbus WriteDoubleWord 0x10000014 0x00000100
-        sysbus.uart0 CreateFileBackend @\(uartLogPath) true
+        sysbus.uart0 RecordToAFile @\(uartLogPath)
         machine StartGDBServer 3333
         """
         

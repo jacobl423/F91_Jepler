@@ -127,9 +127,6 @@ public final class EmulatorSession: ObservableObject {
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     self.processOutputBuffer += str
-                    if self.uartLogs.isEmpty {
-                        self.uartLogs = String(self.processOutputBuffer.suffix(16000))
-                    }
                 }
             }
             
@@ -204,8 +201,7 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func rebootMachine() {
-        socketClient.send(command: "clear")
-        socketClient.send(command: "mach")
+        socketClient.send(command: "machine Reset")
         setupInitialCommands()
         self.uartLogs += "\n--- MACHINE COLD REBOOT ---\n"
     }
