@@ -64,3 +64,7 @@ bin/
 *.kicad_prl
 *.lck
 *-backups/
+
+# Swift / macOS App Build Output
+Software/macOS_App/.build/
+Software/macOS_App/build/
