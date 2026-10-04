@@ -123,6 +123,16 @@ public final class EmulatorSession: ObservableObject {
                 renodePath: renodePath
             )
             
+            processManager.onOutputReceived = { [weak self] str in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    self.processOutputBuffer += str
+                    if self.uartLogs.isEmpty {
+                        self.uartLogs = String(self.processOutputBuffer.suffix(16000))
+                    }
+                }
+            }
+            
             if let workDir = processManager.workDir {
                 self.framePpmURL = workDir.appendingPathComponent("screen.ppm")
             }
@@ -202,31 +212,15 @@ public final class EmulatorSession: ObservableObject {
     
     private func startLogPolling(uartLogURL: URL) {
         logTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            
-            var combinedLogs = ""
-            
-            // 1. Read process stdout/stderr pipe safely
-            let handle = self.processManager.outputPipe.fileHandleForReading
-            let data = handle.availableData
-            if !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
-                Task { @MainActor in
-                    self.processOutputBuffer += str
-                }
-            }
-            
-            // 2. Read UART log file safely
-            if let fileData = try? Data(contentsOf: uartLogURL), !fileData.isEmpty {
-                let fileLogs = String(decoding: fileData, as: UTF8.self)
-                combinedLogs = fileLogs
-            } else {
-                combinedLogs = self.processOutputBuffer
-            }
-            
-            if !combinedLogs.isEmpty {
-                Task { @MainActor in
-                    self.uartLogs = String(combinedLogs.suffix(16000))
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self = self else { return }
+                if let fileData = try? Data(contentsOf: uartLogURL), !fileData.isEmpty {
+                    let fileLogs = String(decoding: fileData, as: UTF8.self)
+                    DispatchQueue.main.async {
+                        self.uartLogs = String(fileLogs.suffix(16000))
+                    }
                 }
             }
         }
@@ -237,12 +231,15 @@ public final class EmulatorSession: ObservableObject {
     private func startFramePolling() {
         frameTimer?.invalidate()
         guard let ppmURL = self.framePpmURL else { return }
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self = self else { return }
                 self.socketClient.send(command: "sysbus.twi0.display SaveFrame \"\(ppmURL.path)\"")
                 if let data = try? Data(contentsOf: ppmURL), let cgImg = self.cgImageFromPPM(data: data) {
-                    self.oledImage = cgImg
+                    DispatchQueue.main.async {
+                        self.oledImage = cgImg
+                    }
                 }
             }
         }
@@ -250,7 +247,7 @@ public final class EmulatorSession: ObservableObject {
         self.frameTimer = timer
     }
     
-    private func cgImageFromPPM(data: Data) -> CGImage? {
+    private nonisolated func cgImageFromPPM(data: Data) -> CGImage? {
         guard let strHeader = String(data: data.prefix(100), encoding: .ascii) else { return nil }
         let components = strHeader.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         guard components.count >= 4, components[0] == "P6" else { return nil }

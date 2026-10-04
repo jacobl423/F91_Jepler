@@ -6,6 +6,7 @@ public final class RenodeProcessManager {
     public private(set) var workDir: URL?
     public private(set) var uartLogURL: URL?
     public private(set) var outputPipe = Pipe()
+    public var onOutputReceived: ((String) -> Void)?
     
     public init() {}
     
@@ -93,6 +94,15 @@ public final class RenodeProcessManager {
         proc.standardError = pipe
         self.outputPipe = pipe
         
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
+                DispatchQueue.main.async {
+                    self?.onOutputReceived?(str)
+                }
+            }
+        }
+        
         try proc.run()
         self.process = proc
         
@@ -100,6 +110,7 @@ public final class RenodeProcessManager {
     }
     
     public func stop() {
+        outputPipe.fileHandleForReading.readabilityHandler = nil
         if let proc = process, proc.isRunning {
             proc.terminate()
             proc.waitUntilExit()
