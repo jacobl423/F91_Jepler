@@ -10,8 +10,7 @@ These supersede conflicting battery, package, fit and charging assumptions in th
 - Use nRF52840-QIAA (AQFN73) for the initial draft and an external 32.768 kHz crystal.
 - Replace the rechargeable coin-cell idea with a protected LiPo secured to the board assembly; exact cell is not selected.
 - Preserve the bracket as a reference. The user has no physical bracket available, so battery fit, bracket geometry and continuity remain provisional.
-- Do not treat the bracket or buttons as proven charging contacts. No verified short-circuit-proof charging design exists.
-- [KiCad A0](Hardware/KiCad/drafts/f91_jepler/README.md) is an unrouted core/placement draft, not a complete or manufacturing-ready watch board.
+- **Official Charging & Button Plan:** The target design is the **Modified Metal Cage combined with Split-Pad PCB contacts**. The original Casio bracket will be cut and selectively insulated to isolate the buttons electrically (for charging) while preserving their mechanical leaf springs. (Note: physical verification of bracket geometry and cutting feasibility is still required before routing).
 
 ---
 
@@ -46,11 +45,10 @@ We want a rechargeable coin-cell solution while preserving approximately the CR2
 Chosen Battery: **ML2016** rechargeable lithium coin cell (~3.0V nominal).
 We are discarding the original Casio metal internal cage and instead using a low-profile SMD battery retainer (e.g., Keystone 3003) soldered directly to the back of the PCB.
 
-5. **TWO-CONTACT CHARGING INTERFACE (Button Charging Options)**
-We want to use the watch's physical side buttons as a charging input by inserting the watch into a dock that pushes the buttons down. *Note: The final button architecture is still open-ended and actively being explored.*
-- **Option A (Floating Button / Split-Pad):** Discard the internal metal VCC cage entirely. The stainless steel buttons sit suspended in the resin case and are electrically floating. The PCB edge cutouts feature **split (interdigitated) pads**. When a button is pushed by a dock, the flat inner tip of the metal button bridges the split pads, routing power to an internal charging IC. 
-  * *CRITICAL FLAW:* Without the metal cage, there are no leaf springs to "unpress" the buttons. The O-rings do not provide enough return force, meaning the buttons will feel mushy and likely get stuck inward.
-- **Option B (Modified Metal Cage):** Retain the original Casio metal cage, but physically cut it in half and add insulation to one side. This would allow two of the buttons to no longer contact the battery (VCC), isolating them for use as separate charging contacts while retaining the original mechanical leaf springs (solving the return-force issue of Option A).
+5. **TWO-CONTACT CHARGING INTERFACE (Modified Metal Cage + Split-Pad)**
+We want to use the watch's physical side buttons as a charging input by inserting the watch into a dock that pushes the buttons down. 
+*Final Decision (The Modified Metal Cage):* We will retain the original Casio metal cage to preserve the mechanical leaf springs that push the buttons back out (a critical requirement). However, we will physically cut the cage in half and add insulation to isolate two of the buttons from the battery positive (VCC). 
+The PCB edge cutouts will feature **split (interdigitated) pads**. When an isolated button is pushed inward by a dock, the flat inner tip of the metal button bridges the split pads, routing power to an internal charging IC. This provides a completely sealed, dual-purpose charging and UI mechanism without drilling the waterproof case.
 
 6. **OTA / WIRELESS FIRMWARE UPDATES**
 Normal firmware development and updates should NOT require opening the watch. We will use Zephyr's SMP Server for OTA DFU. Physical programming/debug access (SWD) will still exist internally as emergency recovery.
@@ -73,7 +71,7 @@ Retaining the original F-91W piezo/beeper system attached to the case back.
 
 - **Mechanicals:** Parsing the original Kepler movement holder STL yields a maximum bounding box of approx 26.18 mm x 25.47 mm x 4.40 mm.
 - **PCB Stack:** A 0.8mm or 1.0mm 4-layer board is recommended for the nRF52840 to ensure proper ground planes and RF impedance matching.
-- **Button Routing:** Solved via the Split-Pad Design.
+- **Button Routing:** Solved via the Split-Pad Design paired with the Modified Metal Cage.
     - Button A (Top-Left - Charger Positive): Pad A1 goes to Charger `VIN`. Pad A2 goes to MCU GPIO via 100kΩ series resistor.
     - Button B (Bottom-Left - Charger Negative): Pad B1 goes to `GND`. Pad B2 goes to MCU GPIO.
     - Button C (Right - Standard UI): Wired identically to Button B.
