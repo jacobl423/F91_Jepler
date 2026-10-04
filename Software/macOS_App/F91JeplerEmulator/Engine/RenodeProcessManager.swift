@@ -58,11 +58,9 @@ public final class RenodeProcessManager {
             }
         }
         
-        let freePort = findFreePort()
-        var uartPort = findFreePort()
-        if uartPort == freePort {
-            uartPort += 1
-        }
+        let ports = findFreePorts(count: 2)
+        let freePort = ports.count > 0 ? ports[0] : 1239
+        let uartPort = ports.count > 1 ? ports[1] : 1240
         self.port = freePort
         
         let rescContent = RenodeScriptGenerator.generateResc(
@@ -125,35 +123,40 @@ public final class RenodeProcessManager {
         uartLogURL = nil
     }
     
-    private func findFreePort() -> UInt16 {
-        var socketRaw: Int32 = -1
-        socketRaw = socket(AF_INET, SOCK_STREAM, 0)
-        guard socketRaw >= 0 else { return 1239 }
+    private func findFreePorts(count: Int) -> [UInt16] {
+        var sockets: [Int32] = []
+        var ports: [UInt16] = []
         
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-        addr.sin_port = 0
-        
-        var addrCopy = addr
-        let bindRes = withUnsafePointer(to: &addrCopy) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(socketRaw, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+        for _ in 0..<count {
+            let sock = socket(AF_INET, SOCK_STREAM, 0)
+            if sock >= 0 {
+                var addr = sockaddr_in()
+                addr.sin_family = sa_family_t(AF_INET)
+                addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+                addr.sin_port = 0
+                
+                var addrCopy = addr
+                let bindRes = withUnsafePointer(to: &addrCopy) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        bind(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                }
+                if bindRes == 0 {
+                    var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+                    getsockname(sock, withUnsafeMutablePointer(to: &addrCopy) {
+                        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { $0 }
+                    }, &len)
+                    ports.append(UInt16(bigEndian: addrCopy.sin_port))
+                    sockets.append(sock)
+                } else {
+                    close(sock)
+                }
             }
         }
-        
-        if bindRes == 0 {
-            var len = socklen_t(MemoryLayout<sockaddr_in>.size)
-            getsockname(socketRaw, withUnsafeMutablePointer(to: &addrCopy) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { $0 }
-            }, &len)
-            let allocatedPort = UInt16(bigEndian: addrCopy.sin_port)
-            close(socketRaw)
-            return allocatedPort
+        for sock in sockets {
+            close(sock)
         }
-        
-        close(socketRaw)
-        return 1239
+        return ports
     }
     
     deinit {

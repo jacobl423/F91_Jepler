@@ -42,6 +42,7 @@ public final class EmulatorSession: ObservableObject {
     @Published public var isTargetedForDrop: Bool = false
     @Published public var terminalSearchText: String = ""
     @Published public var terminalAutoScroll: Bool = true
+    @Published public var selectedTerminalTab: Int = 0 // 0: Zephyr UART, 1: Renode Console
     
     @Published public var cpuInspector = CPUInspectorModel()
     
