@@ -1,8 +1,8 @@
-# f91_jepler
+# F91_Jepler
 
 ## Project Overview
 
-The **f91_jepler** is a complete redesign and evolution of the classic Casio F91W watch, inspired by the original [F91 Kepler](https://github.com/drpykachu/F91_Kepler) project. This project completely replaces the original internals of the watch, keeping only the original resin case and buttons, while adding an OLED display, a powerful Bluetooth-capable MCU, and a rechargeable battery system.
+The **F91_Jepler** is a complete redesign and evolution of the classic Casio F91W watch, inspired by the original [F91 Kepler](https://github.com/drpykachu/F91_Kepler) project. This project completely replaces the original internals of the watch, keeping only the original resin case and buttons, while adding an OLED display, a powerful Bluetooth-capable MCU, and a rechargeable battery system.
 
 The redesign is in progress. The original Kepler hardware is a mechanical reference; fit and charging arrangements for the new nRF52840 board are not yet verified.
 
