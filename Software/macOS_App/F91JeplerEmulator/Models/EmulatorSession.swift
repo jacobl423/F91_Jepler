@@ -138,9 +138,11 @@ public final class EmulatorSession: ObservableObject {
             
             socketClient.onConnected = { [weak self] in
                 Task { @MainActor in
-                    self?.isRunning = true
-                    self?.statusMessage = "Renode Connected & Running"
-                    self?.setupInitialCommands()
+                    guard let self = self else { return }
+                    self.isRunning = true
+                    self.statusMessage = "Renode Connected & Running"
+                    self.setupInitialCommands()
+                    self.uartSocketClient.connect(port: uartPort)
                 }
             }
             
@@ -161,9 +163,8 @@ public final class EmulatorSession: ObservableObject {
                 }
             }
             
-            // Connect sockets with auto-retry
+            // Connect monitor socket with auto-retry
             self.socketClient.connect(port: port)
-            self.uartSocketClient.connect(port: uartPort)
             
             startFramePolling()
             

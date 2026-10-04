@@ -7,22 +7,22 @@ public final class RenodeUartSocketClient {
     
     public var onTextReceived: ((String) -> Void)?
     public private(set) var isConnected: Bool = false
+    private var isConnecting = false
     
     private var targetPort: UInt16 = 0
-    private var attempts = 0
     
     public init() {}
     
     public func connect(port: UInt16) {
         disconnect()
         self.targetPort = port
-        self.attempts = 0
+        self.isConnecting = false
         tryConnect()
     }
     
     private func tryConnect() {
-        guard !isConnected else { return }
-        attempts += 1
+        guard !isConnected, !isConnecting, targetPort > 0 else { return }
+        isConnecting = true
         
         let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(integerLiteral: targetPort))
         let nwConnection = NWConnection(to: endpoint, using: .tcp)
@@ -32,10 +32,11 @@ public final class RenodeUartSocketClient {
             switch state {
             case .ready:
                 self.isConnected = true
-                self.attempts = 0
+                self.isConnecting = false
                 self.receiveNext()
             case .failed, .waiting:
                 self.isConnected = false
+                self.isConnecting = false
                 self.connection = nil
                 nwConnection.cancel()
                 self.scheduleRetry()
@@ -49,8 +50,8 @@ public final class RenodeUartSocketClient {
     }
     
     private func scheduleRetry() {
-        guard !isConnected, attempts < 30 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        guard !isConnected else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.tryConnect()
         }
     }
@@ -66,12 +67,14 @@ public final class RenodeUartSocketClient {
                 self.receiveNext()
             } else {
                 self.isConnected = false
+                self.scheduleRetry()
             }
         }
     }
     
     public func disconnect() {
         isConnected = false
+        isConnecting = false
         connection?.cancel()
         connection = nil
     }
