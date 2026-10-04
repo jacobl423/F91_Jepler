@@ -40,21 +40,28 @@ public final class RenodeProcessManager {
         self.workDir = tempDir
         
         let localAppBin = tempDir.appendingPathComponent("app.signed.bin")
+        try? FileManager.default.removeItem(at: localAppBin)
         try? FileManager.default.copyItem(at: appBinURL, to: localAppBin)
         
         var localBootloader: URL? = nil
         if let bl = bootloaderURL {
             let dest = tempDir.appendingPathComponent("mcuboot.elf")
-            if (try? FileManager.default.copyItem(at: bl, to: dest)) != nil {
+            try? FileManager.default.removeItem(at: dest)
+            if (try? FileManager.default.copyItem(at: bl, to: dest)) != nil || FileManager.default.fileExists(atPath: dest.path) {
                 localBootloader = dest
+            } else if FileManager.default.fileExists(atPath: bl.path) {
+                localBootloader = bl
             }
         }
         
         var localSSD1306: URL? = nil
         if let cs = ssd1306CsURL {
             let dest = tempDir.appendingPathComponent("F91SSD1306.cs")
-            if (try? FileManager.default.copyItem(at: cs, to: dest)) != nil {
+            try? FileManager.default.removeItem(at: dest)
+            if (try? FileManager.default.copyItem(at: cs, to: dest)) != nil || FileManager.default.fileExists(atPath: dest.path) {
                 localSSD1306 = dest
+            } else if FileManager.default.fileExists(atPath: cs.path) {
+                localSSD1306 = cs
             }
         }
         

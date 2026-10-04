@@ -26,7 +26,7 @@ public struct RenodeScriptGenerator {
         machine StartGDBServer 3333
         """
         
-        if let bl = bootloaderPath, !bl.isEmpty, FileManager.default.fileExists(atPath: bl) {
+        if let bl = bootloaderPath, !bl.isEmpty {
             script += "\nsysbus LoadELF @\(bl)"
         }
         
