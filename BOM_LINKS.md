@@ -20,6 +20,7 @@ Below is the list of core components required for the f91_jepler hardware redesi
 *   **Description:** Fits the original Casio F91W window perfectly. Uses an SSD1306 controller and SPI interface.
 *   **Estimated Price:** $3.50
 *   **Buy Link:** [BuyDisplay (EastRising) ER-OLED0.83-1](https://www.buydisplay.com/0-83-inch-oled-display-module-spi-ssd1306-controller-blue-on-black-96x39)
+*   Other color option: [Black background with white text](https://www.buydisplay.com/96x39-pixel-0-83-inch-small-oled-display-manufacturers-i2c-serial-spi)
 
 ### 4. Battery & Power Management
 *   **Battery Part:** Small Rechargeable 1-cell 3.7V Li-ion/LiPo Battery
