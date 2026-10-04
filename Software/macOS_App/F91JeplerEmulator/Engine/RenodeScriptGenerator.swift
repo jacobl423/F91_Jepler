@@ -32,6 +32,8 @@ public struct RenodeScriptGenerator {
         
         script += """
         \nsysbus LoadBinary @\(appBinPath) 0xc000
+        sysbus.cpu VectorTableOffset 0x0
+        sysbus.cpu Reset
         start
         """
         
