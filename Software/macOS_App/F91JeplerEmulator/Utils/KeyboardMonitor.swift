@@ -15,16 +15,27 @@ public final class KeyboardMonitor {
         stop()
         
         keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // If the user is typing in a text field or search box, do not intercept hotkeys
+            if let responder = NSApp.keyWindow?.firstResponder,
+               (responder is NSTextView || responder is NSTextField || responder is NSText) {
+                return event
+            }
+            
             if let key = self?.keyFrom(event: event) {
                 if !event.isARepeat {
                     self?.onKeyDown?(key)
                 }
-                return nil // Swallow event so beep doesn't sound
+                return nil // Swallow hotkey event (1/2/3) so system beep doesn't sound
             }
             return event
         }
         
         keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
+            if let responder = NSApp.keyWindow?.firstResponder,
+               (responder is NSTextView || responder is NSTextField || responder is NSText) {
+                return event
+            }
+            
             if let key = self?.keyFrom(event: event) {
                 self?.onKeyUp?(key)
                 return nil
