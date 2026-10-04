@@ -5,6 +5,7 @@ public final class RenodeProcessManager {
     public private(set) var port: UInt16 = 0
     public private(set) var workDir: URL?
     public private(set) var uartLogURL: URL?
+    public private(set) var outputPipe = Pipe()
     
     public init() {}
     
@@ -87,9 +88,10 @@ public final class RenodeProcessManager {
             rescFile.path
         ]
         
-        var env = ProcessInfo.processInfo.environment
-        env["TMPDIR"] = tempDir.path
-        proc.environment = env
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+        self.outputPipe = pipe
         
         try proc.run()
         self.process = proc

@@ -22,6 +22,7 @@ public final class EmulatorSession: ObservableObject {
     @Published public var watchPanelHeight: CGFloat = 210
     @Published public var terminalPanelHeight: CGFloat = 280
     @Published public var uartLogs: String = ""
+    @Published public var processOutputBuffer: String = ""
     @Published public var oledImage: CGImage? = nil
     
     @Published public var pressedKeys: Set<String> = [] // "1", "2", "3"
@@ -203,9 +204,29 @@ public final class EmulatorSession: ObservableObject {
         logTimer?.invalidate()
         let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            if let logs = try? String(contentsOf: uartLogURL, encoding: .utf8) {
+            
+            var combinedLogs = ""
+            
+            // 1. Read process stdout/stderr pipe safely
+            let handle = self.processManager.outputPipe.fileHandleForReading
+            let data = handle.availableData
+            if !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
                 Task { @MainActor in
-                    self.uartLogs = String(logs.suffix(16000))
+                    self.processOutputBuffer += str
+                }
+            }
+            
+            // 2. Read UART log file safely
+            if let fileData = try? Data(contentsOf: uartLogURL), !fileData.isEmpty {
+                let fileLogs = String(decoding: fileData, as: UTF8.self)
+                combinedLogs = fileLogs
+            } else {
+                combinedLogs = self.processOutputBuffer
+            }
+            
+            if !combinedLogs.isEmpty {
+                Task { @MainActor in
+                    self.uartLogs = String(combinedLogs.suffix(16000))
                 }
             }
         }
