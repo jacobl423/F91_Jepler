@@ -12,8 +12,8 @@ public struct CasioWatchFrameView: View {
         VStack(spacing: 12) {
             // Main Watch Bezel Canvas
             GeometryReader { geo in
-                let baseWidth: CGFloat = 460
-                let baseHeight: CGFloat = 420
+                let baseWidth: CGFloat = 710
+                let baseHeight: CGFloat = 390
                 let scale = max(0.4, min(geo.size.width / baseWidth, geo.size.height / baseHeight, 1.2))
                 
                 ZStack {
@@ -199,65 +199,67 @@ public struct CasioWatchFrameView: View {
                         onClick: { session.buttonClick(key: "3") }
                     )
                     .offset(x: 198, y: 55)
+                    
+                    // Side Button Controls (Positioned directly adjacent to hardware push pins)
+                    // Left Column: Button A (LIGHT) and Button B (MODE)
+                    SideButtonControlCard(
+                        name: "LIGHT",
+                        pin: session.pcbBoard.buttonAPin,
+                        hotkey: "L / 1",
+                        isPressed: session.pressedKeys.contains("1"),
+                        isLeft: true,
+                        onClick: { session.buttonClick(key: "1") },
+                        onToggleHold: {
+                            if session.pressedKeys.contains("1") {
+                                session.buttonUp(key: "1")
+                            } else {
+                                session.buttonDown(key: "1")
+                            }
+                        }
+                    )
+                    .offset(x: -282, y: -45)
+                    
+                    SideButtonControlCard(
+                        name: "MODE",
+                        pin: session.pcbBoard.buttonBPin,
+                        hotkey: "M / 2",
+                        isPressed: session.pressedKeys.contains("2"),
+                        isLeft: true,
+                        onClick: { session.buttonClick(key: "2") },
+                        onToggleHold: {
+                            if session.pressedKeys.contains("2") {
+                                session.buttonUp(key: "2")
+                            } else {
+                                session.buttonDown(key: "2")
+                            }
+                        }
+                    )
+                    .offset(x: -282, y: 55)
+                    
+                    // Right Column: Button C (ALARM / 24HR)
+                    SideButtonControlCard(
+                        name: "ALARM / 24H",
+                        pin: session.pcbBoard.buttonCPin,
+                        hotkey: "A / 3",
+                        isPressed: session.pressedKeys.contains("3"),
+                        isLeft: false,
+                        onClick: { session.buttonClick(key: "3") },
+                        onToggleHold: {
+                            if session.pressedKeys.contains("3") {
+                                session.buttonUp(key: "3")
+                            } else {
+                                session.buttonDown(key: "3")
+                            }
+                        }
+                    )
+                    .offset(x: 282, y: 55)
                 }
                 .scaleEffect(scale)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
-            .frame(minHeight: 330)
-            
-            // Bottom Workbench Controls Strip (Momentary Clicks, Hold Status, Theme)
-            HStack(spacing: 20) {
-                // Button A Controls
-                ButtonToolbarPill(
-                    name: "Button A · Light",
-                    hotkey: "L or 1",
-                    isPressed: session.pressedKeys.contains("1"),
-                    onClick: { session.buttonClick(key: "1") },
-                    onToggleHold: {
-                        if session.pressedKeys.contains("1") {
-                            session.buttonUp(key: "1")
-                        } else {
-                            session.buttonDown(key: "1")
-                        }
-                    }
-                )
-                
-                // Button B Controls
-                ButtonToolbarPill(
-                    name: "Button B · Mode",
-                    hotkey: "M or 2",
-                    isPressed: session.pressedKeys.contains("2"),
-                    onClick: { session.buttonClick(key: "2") },
-                    onToggleHold: {
-                        if session.pressedKeys.contains("2") {
-                            session.buttonUp(key: "2")
-                        } else {
-                            session.buttonDown(key: "2")
-                        }
-                    }
-                )
-                
-                // Button C Controls
-                ButtonToolbarPill(
-                    name: "Button C · Alarm/Toggle",
-                    hotkey: "A / Space / 3",
-                    isPressed: session.pressedKeys.contains("3"),
-                    onClick: { session.buttonClick(key: "3") },
-                    onToggleHold: {
-                        if session.pressedKeys.contains("3") {
-                            session.buttonUp(key: "3")
-                        } else {
-                            session.buttonDown(key: "3")
-                        }
-                    }
-                )
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(10)
+            .frame(minHeight: 280)
         }
-        .padding(8)
+        .padding(4)
     }
 }
 
@@ -320,44 +322,69 @@ struct CasioPushButton: View {
     }
 }
 
-struct ButtonToolbarPill: View {
+struct SideButtonControlCard: View {
     let name: String
+    let pin: String
     let hotkey: String
     let isPressed: Bool
+    let isLeft: Bool
     let onClick: () -> Void
     let onToggleHold: () -> Void
     
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(isPressed ? Color.green : Color.gray.opacity(0.5))
-                .frame(width: 9, height: 9)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(name)
-                    .font(.system(size: 11, weight: .semibold))
-                Text("[\(hotkey)]")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.secondary)
+        VStack(spacing: 5) {
+            HStack(spacing: 4) {
+                if !isLeft {
+                    Image(systemName: "arrowtriangle.backward.fill")
+                        .font(.system(size: 7))
+                        .foregroundColor(isPressed ? .green : Color(white: 0.5))
+                }
+                Circle()
+                    .fill(isPressed ? Color.green : Color.gray.opacity(0.4))
+                    .frame(width: 7, height: 7)
+                    .shadow(color: isPressed ? Color.green.opacity(0.9) : .clear, radius: 4)
+                VStack(alignment: isLeft ? .leading : .trailing, spacing: 1) {
+                    Text(name)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(isPressed ? .green : .primary)
+                    Text("Pin: \(pin)")
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                if isLeft {
+                    Spacer(minLength: 2)
+                    Image(systemName: "arrowtriangle.forward.fill")
+                        .font(.system(size: 7))
+                        .foregroundColor(isPressed ? .green : Color(white: 0.5))
+                }
             }
-            
-            Button("Click (150ms)") {
-                onClick()
+            Text("Key: \(hotkey)")
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: isLeft ? .leading : .trailing)
+            HStack(spacing: 4) {
+                Button("Click", action: onClick)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .font(.system(size: 9.5, weight: .semibold))
+                Button(isPressed ? "Release" : "Hold", action: onToggleHold)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(isPressed ? .red : .accentColor)
+                    .font(.system(size: 9.5, weight: .semibold))
             }
-            .buttonStyle(.bordered)
-            .font(.system(size: 10))
-            
-            Button(isPressed ? "Release" : "Hold") {
-                onToggleHold()
-            }
-            .buttonStyle(.bordered)
-            .tint(isPressed ? .red : .accentColor)
-            .font(.system(size: 10))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(NSColor.windowBackgroundColor))
-        .cornerRadius(8)
+        .padding(8)
+        .frame(width: 120)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.windowBackgroundColor).opacity(0.92))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isPressed ? Color.green.opacity(0.8) : Color(white: 0.25), lineWidth: isPressed ? 1.5 : 1)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 5, x: 0, y: 2)
+        )
     }
 }
 
