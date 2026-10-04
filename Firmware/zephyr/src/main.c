@@ -3,7 +3,71 @@
 #include <zephyr/display/cfb.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
 #include <stdio.h>
+
+#include "services/notification_service.h"
+#include "services/clock_service.h"
+
+static const struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+};
+
+static const struct bt_data sd[] = {
+	BT_DATA_BYTES(BT_DATA_UUID128_SOME, BT_UUID_NOTIFICATION_SERVICE_VAL),
+};
+
+static void on_notification_bar_changed(uint8_t bar_val)
+{
+	printk("[BLE] Notification bar update: 0x%02x\n", bar_val);
+}
+
+static void on_incoming_call_received(const char *caller, uint16_t len)
+{
+	printk("[BLE] Incoming call from: %s\n", caller);
+}
+
+static void on_incoming_text_received(const char *text, uint16_t len)
+{
+	printk("[BLE] Incoming text: %s\n", text);
+}
+
+static const struct notification_service_cb notif_cbs = {
+	.bar_cb = on_notification_bar_changed,
+	.call_cb = on_incoming_call_received,
+	.text_cb = on_incoming_text_received,
+};
+
+static void on_clock_time_changed(uint32_t timestamp)
+{
+	printk("[BLE] Clock time set to epoch: %u\n", timestamp);
+}
+
+static void on_clock_tz_changed(uint16_t tz)
+{
+	printk("[BLE] Clock timezone set to: %u\n", tz);
+}
+
+static void on_clock_timemode_changed(uint8_t mode)
+{
+	printk("[BLE] Clock timemode set to: %u (%s)\n", mode, mode ? "24-hr" : "12-hr");
+}
+
+static void on_clock_dst_changed(uint8_t dst)
+{
+	printk("[BLE] Clock DST set to: %u\n", dst);
+}
+
+static const struct clock_service_cb clock_cbs = {
+	.time_cb = on_clock_time_changed,
+	.tz_cb = on_clock_tz_changed,
+	.timemode_cb = on_clock_timemode_changed,
+	.dst_cb = on_clock_dst_changed,
+};
 
 static int draw_clock(const struct device *display, uint64_t seconds,
                       const bool pressed[3])
@@ -54,6 +118,22 @@ int main(void)
     if (cfb_framebuffer_init(display)) {
         printk("Framebuffer initialization failed!\n");
         return 0;
+    }
+
+    int bt_err = bt_enable(NULL);
+    if (bt_err) {
+        printk("Bluetooth init failed (err %d)\n", bt_err);
+    } else {
+        printk("Bluetooth initialized successfully\n");
+        notification_service_init(&notif_cbs);
+        clock_service_init(&clock_cbs);
+
+        bt_err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+        if (bt_err) {
+            printk("Advertising failed to start (err %d)\n", bt_err);
+        } else {
+            printk("BLE Advertising started (F91_Jepler)\n");
+        }
     }
 
     bool pressed[3] = {false};
