@@ -379,7 +379,7 @@ public struct PCBComparisonView: View {
                 Text("REVISION CHANGES (\(diff.componentDiffs.count))")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                 Spacer()
-                if let ref = focusedRef {
+                if focusedRef != nil {
                     Button("Clear Focus") { focusedRef = nil }
                         .font(.system(size: 9))
                         .buttonStyle(.plain)

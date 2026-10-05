@@ -368,6 +368,13 @@ public final class KiCadParser {
                             radius = c.distance(to: endPt)
                         }
                     }
+                    if key == "stroke" {
+                        for sSub in sub.dropFirst() {
+                            if case .list(let sList) = sSub, sList.count >= 2, sList[0].stringValue == "width" {
+                                strokeWidth = Double(sList[1].stringValue ?? "") ?? 0.15
+                            }
+                        }
+                    }
                 }
                 
                 if let c = center {

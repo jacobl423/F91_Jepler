@@ -68,10 +68,6 @@ public final class PCBValidator {
             let str = (fp.reference + " " + fp.value + " " + fp.descr + " " + fp.package).uppercased()
             return str.contains("SSD1306") || str.contains("OLED") || str.contains("DISP")
         }
-        let oledNets = board.nets.values.filter { net in
-            let u = net.uppercased()
-            return u.contains("OLED") || u.contains("SSD1306") || (u.contains("SDA") && u.contains("SCL"))
-        }
         let oledTestPoints = board.footprints.filter { fp in
             let v = fp.value.uppercased()
             return v.contains("OLED") || (fp.reference.hasPrefix("TP") && (v.contains("SCL") || v.contains("SDA")))
@@ -173,7 +169,6 @@ public final class PCBValidator {
         }
         
         // 1.5 Decoupling Capacitors on MCU power pins
-        let mcuPads = board.footprints.first(where: { $0.reference == "U1" })?.pads ?? []
         let decouplingCaps = board.footprints.filter { fp in
             fp.reference.hasPrefix("C") &&
             (fp.value.lowercased().contains("100n") || fp.value.lowercased().contains("0.1u") ||

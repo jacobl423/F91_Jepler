@@ -45,8 +45,11 @@ public struct PCBCanvasView: View {
             
             Divider()
             
-            // Interactive 2D Canvas Area
-            GeometryReader { geo in
+            if session.show3DRenderMode {
+                PCB3DRenderView(session: session)
+            } else {
+                // Interactive 2D Canvas Area
+                GeometryReader { geo in
                 let board = session.pcbBoard
                 
                 ZStack {
@@ -380,6 +383,7 @@ public struct PCBCanvasView: View {
                     fitToBoard(in: geo.size)
                 }
             }
+            }
         }
     }
     
@@ -387,6 +391,21 @@ public struct PCBCanvasView: View {
     
     private var canvasControlBar: some View {
         HStack(spacing: 8) {
+            // 2D Vector / 3D Raytrace Render Toggle
+            Picker("View Mode", selection: $session.show3DRenderMode) {
+                Text("2D Vectors").tag(false)
+                Text("3D Render").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 170)
+            .onChange(of: session.show3DRenderMode) { is3D in
+                if is3D && session.pcbRender3DImage == nil {
+                    session.trigger3DRender()
+                }
+            }
+            
+            Divider().frame(height: 16)
+            
             // Zoom Controls
             HStack(spacing: 4) {
                 Button(action: { zoomScale = max(2.0, zoomScale * 0.8) }) {

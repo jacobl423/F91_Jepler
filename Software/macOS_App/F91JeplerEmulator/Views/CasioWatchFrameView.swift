@@ -45,15 +45,17 @@ public struct CasioWatchFrameView: View {
                     }
                     
                     // Live Emulated 96×39 OLED Display Overlay in Screen Window with Rounded Corners
+                    let isDisplayCrossProbed = session.selectedFootprintID.uppercased().contains("J1") || session.selectedFootprintID.uppercased().contains("OLED") || session.selectedFootprintID.uppercased().contains("DISP")
+                    
                     ZStack {
                         // Display Screen Bezel / Unlit background
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(session.oledTheme.unlitColor)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color(red: 0.2, green: 0.35, blue: 0.25).opacity(0.8), lineWidth: 1.5)
+                                    .stroke(isDisplayCrossProbed ? Color.yellow : Color(red: 0.2, green: 0.35, blue: 0.25).opacity(0.8), lineWidth: isDisplayCrossProbed ? 2.5 : 1.5)
                             )
-                            .shadow(color: .black.opacity(0.85), radius: 6, x: 0, y: 2)
+                            .shadow(color: isDisplayCrossProbed ? Color.yellow.opacity(0.5) : .black.opacity(0.85), radius: isDisplayCrossProbed ? 10 : 6, x: 0, y: 2)
                         
                         // Live Emulated Frame Buffer
                         if let cgImg = session.oledImage {
@@ -76,6 +78,14 @@ public struct CasioWatchFrameView: View {
                     }
                     .frame(width: 184, height: 86)
                     .offset(x: 0, y: -8)
+                    .onTapGesture {
+                        session.selectedFootprintID = "J1"
+                    }
+                    
+                    // Cross-Probe States for Buttons
+                    let isACrossProbed = session.selectedFootprintID.uppercased().contains("SWITCH1") || session.selectedFootprintID.uppercased().contains("SW1")
+                    let isBCrossProbed = session.selectedFootprintID.uppercased().contains("SWITCH2") || session.selectedFootprintID.uppercased().contains("SW2")
+                    let isCCrossProbed = session.selectedFootprintID.uppercased().contains("SWITCH3") || session.selectedFootprintID.uppercased().contains("SW3")
                     
                     // Physical Push Buttons Overlaid on Hardware Pusher Stems
                     // Button A: Top-Left (LIGHT)
@@ -83,11 +93,14 @@ public struct CasioWatchFrameView: View {
                         buttonName: "LIGHT",
                         shortcutKey: "L",
                         altKey: "1",
-                        isPressed: session.pressedKeys.contains("1"),
+                        isPressed: session.pressedKeys.contains("1") || isACrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "1") },
                         onUp: { session.buttonUp(key: "1") },
-                        onClick: { session.buttonClick(key: "1") }
+                        onClick: {
+                            session.selectedFootprintID = "Switch1"
+                            session.buttonClick(key: "1")
+                        }
                     )
                     .offset(x: -172, y: -46)
                     
@@ -96,11 +109,14 @@ public struct CasioWatchFrameView: View {
                         buttonName: "MODE",
                         shortcutKey: "M",
                         altKey: "2",
-                        isPressed: session.pressedKeys.contains("2"),
+                        isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "2") },
                         onUp: { session.buttonUp(key: "2") },
-                        onClick: { session.buttonClick(key: "2") }
+                        onClick: {
+                            session.selectedFootprintID = "Switch2"
+                            session.buttonClick(key: "2")
+                        }
                     )
                     .offset(x: -172, y: 33)
                     
@@ -109,11 +125,14 @@ public struct CasioWatchFrameView: View {
                         buttonName: "TOGGLE",
                         shortcutKey: "A",
                         altKey: "3",
-                        isPressed: session.pressedKeys.contains("3"),
+                        isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
                         isLeft: false,
                         onDown: { session.buttonDown(key: "3") },
                         onUp: { session.buttonUp(key: "3") },
-                        onClick: { session.buttonClick(key: "3") }
+                        onClick: {
+                            session.selectedFootprintID = "Switch3"
+                            session.buttonClick(key: "3")
+                        }
                     )
                     .offset(x: 172, y: 33)
                     
@@ -123,10 +142,14 @@ public struct CasioWatchFrameView: View {
                         name: "LIGHT",
                         pin: session.pcbBoard.buttonAPin,
                         hotkey: "L / 1",
-                        isPressed: session.pressedKeys.contains("1"),
+                        isPressed: session.pressedKeys.contains("1") || isACrossProbed,
                         isLeft: true,
-                        onClick: { session.buttonClick(key: "1") },
+                        onClick: {
+                            session.selectedFootprintID = "Switch1"
+                            session.buttonClick(key: "1")
+                        },
                         onToggleHold: {
+                            session.selectedFootprintID = "Switch1"
                             if session.pressedKeys.contains("1") {
                                 session.buttonUp(key: "1")
                             } else {
@@ -140,10 +163,14 @@ public struct CasioWatchFrameView: View {
                         name: "MODE",
                         pin: session.pcbBoard.buttonBPin,
                         hotkey: "M / 2",
-                        isPressed: session.pressedKeys.contains("2"),
+                        isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
                         isLeft: true,
-                        onClick: { session.buttonClick(key: "2") },
+                        onClick: {
+                            session.selectedFootprintID = "Switch2"
+                            session.buttonClick(key: "2")
+                        },
                         onToggleHold: {
+                            session.selectedFootprintID = "Switch2"
                             if session.pressedKeys.contains("2") {
                                 session.buttonUp(key: "2")
                             } else {
@@ -158,10 +185,14 @@ public struct CasioWatchFrameView: View {
                         name: "ALARM / 24H",
                         pin: session.pcbBoard.buttonCPin,
                         hotkey: "A / 3",
-                        isPressed: session.pressedKeys.contains("3"),
+                        isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
                         isLeft: false,
-                        onClick: { session.buttonClick(key: "3") },
+                        onClick: {
+                            session.selectedFootprintID = "Switch3"
+                            session.buttonClick(key: "3")
+                        },
                         onToggleHold: {
+                            session.selectedFootprintID = "Switch3"
                             if session.pressedKeys.contains("3") {
                                 session.buttonUp(key: "3")
                             } else {

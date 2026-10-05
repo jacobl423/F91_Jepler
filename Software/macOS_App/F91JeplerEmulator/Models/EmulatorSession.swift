@@ -97,6 +97,21 @@ public final class EmulatorSession: ObservableObject {
     @Published public var isTargetedForDrop: Bool = false
     @Published public var cpuInspector = CPUInspectorModel()
     
+    // KiCad Tooling, 3D Render & Live Watcher
+    @Published public var activePCBURL: URL? = nil
+    @Published public var isPCBWatcherActive: Bool = false
+    @Published public var pcbRender3DImage: NSImage? = nil
+    @Published public var isRendering3D: Bool = false
+    @Published public var show3DRenderMode: Bool = false
+    @Published public var kicadDRCReport: KiCadDRCReport? = nil
+    @Published public var isRunningDRC: Bool = false
+    @Published public var isExportingGerbers: Bool = false
+    @Published public var exportedGerbersURL: URL? = nil
+    @Published public var pinAuditResult: GPIOPinAuditResult? = nil
+    @Published public var pcbReloadToast: String? = nil
+    
+    public let pcbFileWatcher = PCBFileWatcher()
+    
     private let processManager = RenodeProcessManager()
     private let socketClient = RenodeSocketClient()
     private let uartSocketClient = RenodeUartSocketClient()
@@ -111,6 +126,26 @@ public final class EmulatorSession: ObservableObject {
     
     public func validateActiveBoard() {
         self.pcbValidationResult = PCBValidator.validate(board: self.pcbBoard)
+        auditGPIOPins()
+    }
+    
+    public func auditGPIOPins() {
+        self.pinAuditResult = GPIOPinAuditor.audit(board: self.pcbBoard)
+    }
+    
+    public func syncRenodeWithKiCadPins() {
+        guard let audit = pinAuditResult, audit.hasMismatches else { return }
+        for entry in audit.entries {
+            if entry.signalName.contains("Button A") {
+                self.pcbBoard.buttonAPin = entry.detectedPin
+            } else if entry.signalName.contains("Button B") {
+                self.pcbBoard.buttonBPin = entry.detectedPin
+            } else if entry.signalName.contains("Button C") {
+                self.pcbBoard.buttonCPin = entry.detectedPin
+            }
+        }
+        auditGPIOPins()
+        self.pcbReloadToast = "Renode GPIO pins updated: A=\(pcbBoard.buttonAPin), B=\(pcbBoard.buttonBPin), C=\(pcbBoard.buttonCPin)"
     }
     
     public func loadComparisonPCB(fileURL: URL) {
@@ -119,6 +154,125 @@ public final class EmulatorSession: ObservableObject {
             self.comparisonBoard = draft
             self.pcbDiffResult = PCBDiffEngine.compare(base: self.pcbBoard, draft: draft)
             self.pcbInspectorTab = 4 // Diff tab
+        }
+    }
+    
+    public func loadEmbeddedDefaults() {
+        let pcbCandidate = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
+        if let embeddedPCB = pcbCandidate {
+            self.activePCBURL = embeddedPCB
+            if let board = try? KiCadParser.parse(fileURL: embeddedPCB) {
+                self.pcbBoard = board
+                validateActiveBoard()
+            }
+            startWatchingActivePCB()
+        }
+    }
+    
+    public func startWatchingActivePCB() {
+        guard let url = activePCBURL else { return }
+        pcbFileWatcher.onFileChanged = { [weak self] changedURL in
+            Task { @MainActor [weak self] in
+                self?.reloadPCB(fileURL: changedURL)
+            }
+        }
+        pcbFileWatcher.startWatching(url: url)
+        self.isPCBWatcherActive = pcbFileWatcher.isWatching
+    }
+    
+    public func reloadPCB(fileURL: URL) {
+        guard let board = try? KiCadParser.parse(fileURL: fileURL) else { return }
+        self.pcbBoard = board
+        validateActiveBoard()
+        
+        self.pcbReloadToast = "Auto-reloaded '\(fileURL.lastPathComponent)' from KiCad"
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if self.pcbReloadToast?.contains(fileURL.lastPathComponent) == true {
+                self.pcbReloadToast = nil
+            }
+        }
+        
+        if show3DRenderMode {
+            trigger3DRender()
+        }
+    }
+    
+    // MARK: - KiCad Tooling Actions
+    
+    public func openInKiCad(appType: KiCadAppType) {
+        guard let pcbURL = activePCBURL else { return }
+        let targetURL: URL
+        switch appType {
+        case .pcbEditor:
+            targetURL = pcbURL
+        case .schematicEditor:
+            let schURL = pcbURL.deletingPathExtension().appendingPathExtension("kicad_sch")
+            targetURL = FileManager.default.fileExists(atPath: schURL.path) ? schURL : pcbURL
+        case .kicadProject:
+            let proURL = pcbURL.deletingPathExtension().appendingPathExtension("kicad_pro")
+            targetURL = FileManager.default.fileExists(atPath: proURL.path) ? proURL : pcbURL
+        }
+        KiCadToolService.shared.openFileInKiCad(fileURL: targetURL, appType: appType)
+    }
+    
+    public func revealActivePCBinFinder() {
+        guard let pcbURL = activePCBURL else { return }
+        KiCadToolService.shared.revealInFinder(fileURL: pcbURL)
+    }
+    
+    public func trigger3DRender() {
+        guard let pcbURL = activePCBURL else { return }
+        guard !isRendering3D else { return }
+        isRendering3D = true
+        
+        Task { @MainActor in
+            let outPNG = FileManager.default.temporaryDirectory.appendingPathComponent("kicad_3d_\(UUID().uuidString).png")
+            do {
+                let img = try await KiCadToolService.shared.render3D(pcbURL: pcbURL, outputURL: outPNG, width: 900, height: 900)
+                self.pcbRender3DImage = img
+                self.isRendering3D = false
+            } catch {
+                self.isRendering3D = false
+                self.errorMessage = "KiCad 3D Render Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    public func runKiCadDRC() {
+        guard let pcbURL = activePCBURL else { return }
+        guard !isRunningDRC else { return }
+        isRunningDRC = true
+        
+        Task { @MainActor in
+            do {
+                let report = try await KiCadToolService.shared.runDRC(pcbURL: pcbURL)
+                self.kicadDRCReport = report
+                self.isRunningDRC = false
+                self.pcbReloadToast = "KiCad DRC: \(report.errorCount) errors, \(report.unconnectedCount) unconnected"
+            } catch {
+                self.isRunningDRC = false
+                self.errorMessage = "KiCad DRC Execution Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    public func exportGerberPackage() {
+        guard let pcbURL = activePCBURL else { return }
+        guard !isExportingGerbers else { return }
+        isExportingGerbers = true
+        
+        Task { @MainActor in
+            do {
+                let zipURL = try await KiCadToolService.shared.exportManufacturingZip(pcbURL: pcbURL)
+                self.exportedGerbersURL = zipURL
+                self.isExportingGerbers = false
+                self.pcbReloadToast = "Gerbers exported to: \(zipURL.lastPathComponent)"
+                KiCadToolService.shared.revealInFinder(fileURL: zipURL)
+            } catch {
+                self.isExportingGerbers = false
+                self.errorMessage = "Gerber Export Error: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -145,15 +299,6 @@ public final class EmulatorSession: ObservableObject {
         socketClient.send(command: "sysbus ReadDoubleWord 0x\(hexAddr)")
     }
     
-    public func loadEmbeddedDefaults() {
-        if let embeddedPCB = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb") {
-            if let board = try? KiCadParser.parse(fileURL: embeddedPCB) {
-                self.pcbBoard = board
-                validateActiveBoard()
-            }
-        }
-    }
-    
     // MARK: - Process Lifecycle & Socket Bridge (Module A)
     
     public func startSession() {
@@ -173,9 +318,13 @@ public final class EmulatorSession: ObservableObject {
         let ssd1306CsURL = ResourceLoader.url(forResource: "F91SSD1306", withExtension: "cs")
         let pcbURL = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
         
-        if let pcb = pcbURL, let board = try? KiCadParser.parse(fileURL: pcb) {
-            self.pcbBoard = board
-            validateActiveBoard()
+        if let pcb = pcbURL {
+            self.activePCBURL = pcb
+            if let board = try? KiCadParser.parse(fileURL: pcb) {
+                self.pcbBoard = board
+                validateActiveBoard()
+            }
+            startWatchingActivePCB()
         }
         
         do {

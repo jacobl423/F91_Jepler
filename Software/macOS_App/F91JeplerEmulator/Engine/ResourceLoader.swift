@@ -34,6 +34,7 @@ public enum ResourceLoader {
         // 5. FileSystem relative to current working directory (workspace dev mode)
         let cwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let repoCandidates = [
+            cwdURL.appendingPathComponent("Hardware/KiCad/drafts/f91_jepler").appendingPathComponent("\(name).\(ext)"),
             cwdURL.appendingPathComponent("build/renode-app").appendingPathComponent("\(name).\(ext)"),
             cwdURL.appendingPathComponent("bin").appendingPathComponent("\(name).\(ext)"),
             cwdURL.appendingPathComponent("Firmware/renode").appendingPathComponent("\(name).\(ext)"),
