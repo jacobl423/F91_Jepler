@@ -12,7 +12,7 @@ namespace Antmicro.Renode.Peripherals.Video
 {
     public class F91SSD1306 : AutoRepaintingVideo, II2CPeripheral
     {
-        public F91SSD1306(IMachine machine, int width = 96, int height = 40) : base(machine)
+        public F91SSD1306(IMachine machine, int width = 96, int height = 39) : base(machine)
         {
             if(width < 1 || width > 128 || height < 1 || height > 64)
                 throw new ArgumentOutOfRangeException("Invalid SSD1306 panel dimensions");
@@ -67,12 +67,25 @@ namespace Antmicro.Renode.Peripherals.Video
         // Portable snapshot for headless checks; contains the actual emulated pixels.
         public void SaveFrame(string path)
         {
-            Repaint();
-            using(var output = File.Create(path))
+            try
             {
-                var header = System.Text.Encoding.ASCII.GetBytes("P6\n" + Width + " " + Height + "\n255\n");
-                output.Write(header, 0, header.Length);
-                output.Write(buffer, 0, buffer.Length);
+                Repaint();
+                var tempPath = path + ".tmp";
+                using(var output = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                {
+                    var header = System.Text.Encoding.ASCII.GetBytes("P6\n" + Width + " " + Height + "\n255\n");
+                    output.Write(header, 0, header.Length);
+                    output.Write(buffer, 0, buffer.Length);
+                }
+                if(File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+                File.Move(tempPath, path);
+            }
+            catch
+            {
+                // Never crash the emulation process on concurrent file I/O contention
             }
         }
 

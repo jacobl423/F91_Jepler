@@ -12,7 +12,7 @@ machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
 # Zephyr selects LFXO via &lfclk in the application overlay; no extra GPIO oscillator
 # is needed. Renode does not model quartz drift or analog startup behavior.
 include @Firmware/renode/F91SSD1306.cs
-machine LoadPlatformDescriptionFromString "display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 40 }"
+machine LoadPlatformDescriptionFromString "display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 39 }"
 
 # Renode's nRF52840 model uses a dummy Tag for FICR.
 # Zephyr's NVMC driver reads FICR to determine flash size.

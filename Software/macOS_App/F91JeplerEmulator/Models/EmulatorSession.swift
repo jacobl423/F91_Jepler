@@ -339,6 +339,15 @@ public final class EmulatorSession: ObservableObject {
         socketClient.send(command: "sysbus ReadDoubleWord 0x\(hexAddr)")
     }
     
+    public func sendRenodeCommand(_ command: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        
+        // Log formatted user command into monitor view
+        logStore.appendRenodeConsole(text: "\u{1B}[1;36m(monitor) > \(trimmed)\u{1B}[0m\n")
+        socketClient.send(command: trimmed)
+    }
+    
     // MARK: - Process Lifecycle & Socket Bridge (Module A)
     
     public func startSession() {
@@ -409,6 +418,12 @@ public final class EmulatorSession: ObservableObject {
                 Task { @MainActor in
                     self?.errorMessage = err
                     self?.statusMessage = "Socket Error"
+                }
+            }
+            
+            socketClient.onOutputReceived = { [weak self] str in
+                Task { @MainActor [weak self] in
+                    self?.logStore.appendRenodeConsole(text: str)
                 }
             }
             

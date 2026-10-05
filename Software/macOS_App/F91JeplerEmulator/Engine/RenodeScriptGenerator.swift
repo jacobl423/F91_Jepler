@@ -25,7 +25,7 @@ public struct RenodeScriptGenerator {
         
         if let cs = ssd1306CsPath, FileManager.default.fileExists(atPath: cs) {
             script += "\ninclude @\(cs)"
-            script += "\nmachine LoadPlatformDescriptionFromString \"display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 40 }\""
+            script += "\nmachine LoadPlatformDescriptionFromString \"display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 39 }\""
         }
         
         script += """

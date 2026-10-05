@@ -154,7 +154,8 @@ public final class RenodeProcessManager {
                 handle.readabilityHandler = nil
                 return
             }
-            guard let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else { return }
+            let str = String(decoding: data, as: UTF8.self)
+            guard !str.isEmpty else { return }
             
             coalesceQueue.async {
                 coalesceBuffer += str
@@ -194,22 +195,27 @@ public final class RenodeProcessManager {
     
     public func stop() {
         outputPipe.fileHandleForReading.readabilityHandler = nil
-        if let proc = process, proc.isRunning {
-            proc.terminate()
-            
-            // Wait up to 1.0 second, then force kill
-            let startTime = Date()
-            while proc.isRunning && Date().timeIntervalSince(startTime) < 1.0 {
-                usleep(50000)
-            }
+        if let proc = process {
+            process = nil
             if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
+                proc.terminate()
+                DispatchQueue.global(qos: .utility).async {
+                    let startTime = Date()
+                    while proc.isRunning && Date().timeIntervalSince(startTime) < 1.0 {
+                        usleep(30000)
+                    }
+                    if proc.isRunning {
+                        kill(proc.processIdentifier, SIGKILL)
+                    }
+                }
             }
         }
-        process = nil
         
         if let dir = workDir {
-            try? FileManager.default.removeItem(at: dir)
+            let toRemove = dir
+            DispatchQueue.global(qos: .utility).async {
+                try? FileManager.default.removeItem(at: toRemove)
+            }
         }
         workDir = nil
         uartLogURL = nil

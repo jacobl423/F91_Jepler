@@ -4,16 +4,24 @@ import AppKit
 @MainActor
 public struct TerminalView: View {
     @ObservedObject var logStore: TerminalLogStore
+    var session: EmulatorSession?
+    
+    @State private var monitorInputText: String = ""
+    @State private var commandHistory: [String] = []
+    @State private var historyIndex: Int = -1
     
     public init(session: EmulatorSession) {
+        self.session = session
         self.logStore = session.logStore
     }
     
     public init(logStore: TerminalLogStore) {
+        self.session = nil
         self.logStore = logStore
     }
     
     public init() {
+        self.session = nil
         self.logStore = .shared
     }
     
@@ -111,14 +119,86 @@ public struct TerminalView: View {
             
             Divider()
             
-            // Console Terminal View with ANSI Color Rendering & Rock-Solid AppKit NSTextView
-            ConsoleTerminalTextView(
-                text: logStore.filteredText,
-                placeholder: logStore.selectedTab == 0 ? "Waiting for Zephyr UART stream / MCUboot..." : "Waiting for Renode console stream...",
-                autoScroll: logStore.autoScroll
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // High-Performance Incremental Console Terminal View with ANSI Color Pre-rendering
+            ConsoleTerminalTextView(logStore: logStore)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // Interactive Renode Monitor Command Bar (only visible when Renode Monitor is selected)
+            if logStore.selectedTab == 1 {
+                VStack(spacing: 5) {
+                    Divider()
+                    
+                    // Quick Action Chips
+                    HStack(spacing: 6) {
+                        Text("Quick Commands:")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        let quickCmds = ["start", "pause", "step", "mach", "sysbus.cpu PC", "help"]
+                        ForEach(quickCmds, id: \.self) { cmd in
+                            Button(action: {
+                                session?.sendRenodeCommand(cmd)
+                            }) {
+                                Text(cmd)
+                                    .font(.system(size: 9.5, design: .monospaced))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(NSColor.controlBackgroundColor))
+                                    .cornerRadius(4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+                    
+                    // Command Prompt Input
+                    HStack(spacing: 6) {
+                        Text("(monitor) >")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(.cyan)
+                        
+                        TextField("Enter Renode monitor command (e.g. sysbus.cpu PC, pause, start)...", text: $monitorInputText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11, design: .monospaced))
+                            .onSubmit {
+                                sendCurrentCommand()
+                            }
+                        
+                        Button(action: sendCurrentCommand) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "return")
+                                Text("Run")
+                            }
+                            .font(.system(size: 10, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(monitorInputText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(6)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                }
+                .background(Color(NSColor.windowBackgroundColor))
+            }
         }
+    }
+    
+    private func sendCurrentCommand() {
+        let cmd = monitorInputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cmd.isEmpty else { return }
+        
+        commandHistory.append(cmd)
+        historyIndex = commandHistory.count
+        monitorInputText = ""
+        
+        session?.sendRenodeCommand(cmd)
     }
     
     private func exportLogs() {
@@ -133,14 +213,10 @@ public struct TerminalView: View {
 }
 
 public struct ConsoleTerminalTextView: NSViewRepresentable {
-    let text: String
-    let placeholder: String
-    let autoScroll: Bool
+    @ObservedObject var logStore: TerminalLogStore
     
-    public init(text: String, placeholder: String, autoScroll: Bool) {
-        self.text = text
-        self.placeholder = placeholder
-        self.autoScroll = autoScroll
+    public init(logStore: TerminalLogStore) {
+        self.logStore = logStore
     }
     
     public func makeNSView(context: Context) -> NSScrollView {
@@ -169,6 +245,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
         
         scrollView.documentView = textView
         context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
         
         return scrollView
     }
@@ -177,29 +254,100 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
         guard let textView = context.coordinator.textView,
               let textStorage = textView.textStorage else { return }
         
-        let displayText = text.isEmpty ? placeholder : text
-        if context.coordinator.lastRenderedText != displayText {
-            context.coordinator.lastRenderedText = displayText
+        let currentTab = logStore.selectedTab
+        let currentCategory = logStore.selectedCategory
+        let currentSearch = logStore.searchText
+        let currentRevision = logStore.logRevision
+        let lines = logStore.filteredLines
+        let autoScroll = logStore.autoScroll
+        
+        let fullResetNeeded = (context.coordinator.renderedTab != currentTab) ||
+                              (context.coordinator.renderedCategory != currentCategory) ||
+                              (context.coordinator.renderedSearchText != currentSearch) ||
+                              (lines.isEmpty && context.coordinator.renderedLineCount > 0) ||
+                              (lines.count < context.coordinator.renderedLineCount) ||
+                              (context.coordinator.renderedRevision == -1)
+        
+        if fullResetNeeded {
+            context.coordinator.renderedTab = currentTab
+            context.coordinator.renderedCategory = currentCategory
+            context.coordinator.renderedSearchText = currentSearch
+            context.coordinator.renderedRevision = currentRevision
+            context.coordinator.renderedLineCount = lines.count
             
-            let attributed: NSAttributedString
-            if text.isEmpty {
+            if lines.isEmpty {
+                let placeholderText = (currentTab == 0) ? "Waiting for Zephyr UART stream / MCUboot..." : "Waiting for Renode console stream..."
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
                     .foregroundColor: NSColor.gray
                 ]
-                attributed = NSAttributedString(string: placeholder, attributes: attrs)
+                textStorage.beginEditing()
+                textStorage.setAttributedString(NSAttributedString(string: placeholderText, attributes: attrs))
+                textStorage.endEditing()
             } else {
-                attributed = AnsiParser.parseToNSAttributedString(text: displayText)
+                let defaultAttrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+                    .foregroundColor: NSColor(red: 0.88, green: 0.92, blue: 0.88, alpha: 1.0)
+                ]
+                let newline = NSAttributedString(string: "\n", attributes: defaultAttrs)
+                let full = NSMutableAttributedString()
+                for (idx, line) in lines.enumerated() {
+                    full.append(line.attributed)
+                    if idx < lines.count - 1 {
+                        full.append(newline)
+                    }
+                }
+                textStorage.beginEditing()
+                textStorage.setAttributedString(full)
+                textStorage.endEditing()
             }
             
-            textStorage.beginEditing()
-            textStorage.setAttributedString(attributed)
-            textStorage.endEditing()
+            if autoScroll {
+                DispatchQueue.main.async {
+                    context.coordinator.scrollToBottom(nsView)
+                }
+            }
+        } else if currentRevision != context.coordinator.renderedRevision {
+            // Incremental fast-path: only append the new lines
+            context.coordinator.renderedRevision = currentRevision
+            let oldCount = context.coordinator.renderedLineCount
+            let newCount = lines.count
             
-            if autoScroll && !text.isEmpty {
-                let endLength = textStorage.length
-                if endLength > 0 {
-                    textView.scrollRangeToVisible(NSRange(location: endLength, length: 0))
+            if newCount > oldCount {
+                let appendedLines = lines[oldCount..<newCount]
+                let defaultAttrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+                    .foregroundColor: NSColor(red: 0.88, green: 0.92, blue: 0.88, alpha: 1.0)
+                ]
+                let newline = NSAttributedString(string: "\n", attributes: defaultAttrs)
+                let appendChunk = NSMutableAttributedString()
+                
+                if oldCount == 0 {
+                    // Transitioning from empty placeholder
+                    textStorage.beginEditing()
+                    textStorage.setAttributedString(NSAttributedString(string: ""))
+                    textStorage.endEditing()
+                } else if textStorage.length > 0 {
+                    appendChunk.append(newline)
+                }
+                
+                for (idx, line) in appendedLines.enumerated() {
+                    appendChunk.append(line.attributed)
+                    if idx < appendedLines.count - 1 {
+                        appendChunk.append(newline)
+                    }
+                }
+                
+                textStorage.beginEditing()
+                textStorage.append(appendChunk)
+                textStorage.endEditing()
+                
+                context.coordinator.renderedLineCount = newCount
+                
+                if autoScroll {
+                    DispatchQueue.main.async {
+                        context.coordinator.scrollToBottom(nsView)
+                    }
                 }
             }
         }
@@ -210,8 +358,24 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
     }
     
     public class Coordinator {
-        var textView: NSTextView?
-        var lastRenderedText: String = ""
+        weak var textView: NSTextView?
+        weak var scrollView: NSScrollView?
+        var renderedLineCount: Int = 0
+        var renderedTab: Int = -1
+        var renderedCategory: LogCategory = .all
+        var renderedSearchText: String = ""
+        var renderedRevision: Int = -1
+        
         public init() {}
+        
+        func scrollToBottom(_ scrollView: NSScrollView) {
+            guard let documentView = scrollView.documentView else { return }
+            let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
+            let targetPoint = NSPoint(x: 0, y: maxY)
+            if abs(scrollView.contentView.bounds.origin.y - targetPoint.y) > 2.0 {
+                scrollView.contentView.scroll(to: targetPoint)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
     }
 }

@@ -20,7 +20,7 @@ public struct OLEDCanvasView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 170)
+                .frame(width: 290)
                 
                 Toggle("Pixel Grid Mesh", isOn: $displayStore.showPixelGridMesh)
                     .toggleStyle(.checkbox)
@@ -106,7 +106,7 @@ public struct OLEDCanvasView: View {
                         Image(systemName: "display")
                             .font(.system(size: 28))
                             .foregroundColor(displayStore.oledTheme.litColor.opacity(0.6))
-                        Text("96 × 39 SSD1306 OLED")
+                        Text("BuyDisplay 0.83\" 96 × 39 White OLED (ER-OLED0.83-1)")
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundColor(displayStore.oledTheme.litColor)
                         Text(session.isRunning ? "Ingesting I2C Framebuffer (0x3C)..." : "Renode Emulation Inactive")

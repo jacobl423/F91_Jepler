@@ -340,10 +340,10 @@ struct CasioLiveOLEDView: View {
                     .padding(5)
             } else {
                 VStack(spacing: 2) {
-                    Text("96×39 OLED")
-                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                    Text("96×39 WHITE OLED")
+                        .font(.system(size: 9.5, weight: .black, design: .monospaced))
                         .foregroundColor(displayStore.oledTheme.litColor.opacity(0.85))
-                    Text(isRunning ? "WAITING FOR ZEPHYR" : "OFFLINE")
+                    Text(isRunning ? "ER-OLED0.83-1 READY" : "OFFLINE")
                         .font(.system(size: 7.5, weight: .bold, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
