@@ -169,21 +169,21 @@ public struct HardwareSetupView: View {
                         
                         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
                             GridRow {
-                                Text("Button A (Light · Key L / 1):")
+                                Text("Button A (Light · Key 1):")
                                     .font(.system(size: 11))
                                 TextField("Pin (e.g. P0.11)", text: $session.pcbBoard.buttonAPin)
                                     .textFieldStyle(.roundedBorder)
                                     .font(.system(size: 11, design: .monospaced))
                             }
                             GridRow {
-                                Text("Button B (Mode · Key M / 2):")
+                                Text("Button B (Mode · Key 2):")
                                     .font(.system(size: 11))
                                 TextField("Pin (e.g. P0.12)", text: $session.pcbBoard.buttonBPin)
                                     .textFieldStyle(.roundedBorder)
                                     .font(.system(size: 11, design: .monospaced))
                             }
                             GridRow {
-                                Text("Button C (Alarm/Toggle · Key A / 3):")
+                                Text("Button C (Alarm/Toggle · Key 3):")
                                     .font(.system(size: 11))
                                 TextField("Pin (e.g. P0.24)", text: $session.pcbBoard.buttonCPin)
                                     .textFieldStyle(.roundedBorder)

@@ -3,9 +3,9 @@ import SwiftUI
 @main
 struct F91JeplerEmulatorApp: App {
     var body: some Scene {
-        WindowGroup("F-91 Jepler Emulator & Debugger") {
+        WindowGroup("Jepler Dev") {
             ContentView()
-                .frame(minWidth: 900, minHeight: 650)
+                .frame(minWidth: 860, minHeight: 620)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

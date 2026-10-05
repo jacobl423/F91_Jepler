@@ -55,9 +55,9 @@ public struct ToolbarControlsView: View {
             
             // Quick Button Hotkey Legend Badge
             HStack(spacing: 4) {
-                KeyLegendBadge(key: "L", label: "Light")
-                KeyLegendBadge(key: "M", label: "Mode")
-                KeyLegendBadge(key: "A/␣", label: "Toggle")
+                KeyLegendBadge(key: "1", label: "Light")
+                KeyLegendBadge(key: "2", label: "Mode")
+                KeyLegendBadge(key: "3", label: "Toggle")
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)

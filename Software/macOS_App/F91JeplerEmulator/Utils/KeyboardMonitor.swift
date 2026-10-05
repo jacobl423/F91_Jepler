@@ -92,21 +92,21 @@ public final class KeyboardMonitor {
     
     private func keyFrom(event: NSEvent) -> String? {
         // macOS Key codes:
-        // 18 = '1', 83 = Numpad 1, 37 = 'L'
-        // 19 = '2', 84 = Numpad 2, 46 = 'M'
-        // 20 = '3', 85 = Numpad 3, 0 = 'A', 49 = Space
+        // 18 = '1', 83 = Numpad 1
+        // 19 = '2', 84 = Numpad 2
+        // 20 = '3', 85 = Numpad 3
         switch event.keyCode {
-        case 18, 83, 37: // 1 or L (Light / Button A)
+        case 18, 83: // 1
             return "1"
-        case 19, 84, 46: // 2 or M (Mode / Button B)
+        case 19, 84: // 2
             return "2"
-        case 20, 85, 0, 49: // 3 or A or Space (Alarm/Toggle / Button C)
+        case 20, 85: // 3
             return "3"
         default:
-            if let chars = event.charactersIgnoringModifiers?.lowercased() {
-                if chars == "1" || chars == "l" { return "1" }
-                if chars == "2" || chars == "m" { return "2" }
-                if chars == "3" || chars == "a" || chars == " " { return "3" }
+            if let chars = event.charactersIgnoringModifiers {
+                if chars == "1" { return "1" }
+                if chars == "2" { return "2" }
+                if chars == "3" { return "3" }
             }
             return nil
         }

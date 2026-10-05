@@ -10,6 +10,11 @@ public struct ContentView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
+            // Resizable Top Bar with ALL Tabs Visible
+            AppTopBarView(session: session)
+            
+            Divider()
+            
             // Main Content Body based on selected ViewMode
             HSplitView {
                 // Left Panel: Dynamic Workbench View
@@ -36,8 +41,8 @@ public struct ContentView: View {
                     case .split:
                         ResizableVSplitView(
                             topHeight: $session.watchPanelHeight,
-                            minTopHeight: 280,
-                            maxTopHeight: 520
+                            minTopHeight: 200,
+                            maxTopHeight: 600
                         ) {
                             CasioWatchFrameView(session: session)
                         } bottom: {
@@ -45,14 +50,14 @@ public struct ContentView: View {
                         }
                     }
                 }
-                .frame(minWidth: 420, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 300, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
                 
                 // Right Panel: Monospaced UART Terminal with ANSI Colors, Filtering, and Inspection
                 VStack(spacing: 0) {
                     TerminalView(session: session)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(minWidth: 380, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 260, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
             }
             
             // Error / Warning Banner
@@ -113,8 +118,10 @@ public struct ContentView: View {
             return true
         }
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                ToolbarControlsView(session: session)
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { session.showSetupSheet = true }) {
+                    Label("Configure Workbench", systemImage: "gearshape")
+                }
             }
         }
         .sheet(isPresented: $session.showSetupSheet) {
@@ -210,5 +217,122 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+}
+
+public struct AppTopBarView: View {
+    @ObservedObject var session: EmulatorSession
+    
+    public init(session: EmulatorSession) {
+        self.session = session
+    }
+    
+    public var body: some View {
+        HStack(spacing: 10) {
+            // App Branding & Machine Status
+            HStack(spacing: 8) {
+                Text("Jepler Dev")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+                
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(session.isRunning ? Color.green : Color.red)
+                        .frame(width: 7, height: 7)
+                    Text(session.statusMessage)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.leading, 12)
+            
+            Divider().frame(height: 18)
+            
+            // Simulation Controls (Start / Stop / Reboot)
+            HStack(spacing: 6) {
+                Button(action: {
+                    if session.isRunning {
+                        session.stopSession()
+                    } else {
+                        session.startSession()
+                    }
+                }) {
+                    Label(session.isRunning ? "Stop" : "Start", systemImage: session.isRunning ? "square.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(session.isRunning ? .red : .green)
+                .controlSize(.small)
+                
+                Button(action: { session.rebootMachine() }) {
+                    Label("Reboot", systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!session.isRunning)
+            }
+            
+            Divider().frame(height: 18)
+            
+            // Resizable Horizontal Tab Bar showing ALL Tabs in the app
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(ViewMode.allCases) { mode in
+                        Button(action: { session.selectedViewMode = mode }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: mode.iconName)
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text(mode.rawValue)
+                                    .font(.system(size: 11, weight: session.selectedViewMode == mode ? .bold : .medium))
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(
+                                session.selectedViewMode == mode ?
+                                    Color.accentColor :
+                                    Color(NSColor.controlBackgroundColor)
+                            )
+                            .foregroundColor(
+                                session.selectedViewMode == mode ?
+                                    .white :
+                                    .primary
+                            )
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(maxWidth: .infinity)
+            
+            Divider().frame(height: 18)
+            
+            // Hotkeys & Settings
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    KeyLegendBadge(key: "1", label: "Light")
+                    KeyLegendBadge(key: "2", label: "Mode")
+                    KeyLegendBadge(key: "3", label: "Toggle")
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+                
+                Button(action: { session.showSetupSheet = true }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Configure Workbench")
+            }
+            .padding(.trailing, 12)
+        }
+        .padding(.vertical, 6)
+        .background(Color(NSColor.windowBackgroundColor))
     }
 }

@@ -30,7 +30,7 @@ public final class TerminalLogStore: ObservableObject {
     public static let shared = TerminalLogStore()
     
     // Line capacity limit for constant memory footprint
-    private let maxLineCapacity: Int = 2000
+    private let maxLineCapacity: Int = 1000
     private var nextLineId: Int = 0
     
     // Tab 0: UART lines, Tab 1: Renode Monitor lines
@@ -50,6 +50,7 @@ public final class TerminalLogStore: ObservableObject {
     
     // Published filtered view for UI rendering with stable IDs
     @Published public private(set) var filteredLines: [TerminalLogLine] = []
+    @Published public private(set) var filteredText: String = ""
     
     // Raw string caches for backwards compatibility, copy, export
     public var rawUartString: String {
@@ -82,10 +83,16 @@ public final class TerminalLogStore: ObservableObject {
     
     public func appendUart(text: String) {
         pendingUartBuffer += text
+        if pendingUartBuffer.count > 64_000 {
+            pendingUartBuffer = String(pendingUartBuffer.suffix(32_000))
+        }
     }
     
     public func appendRenodeConsole(text: String) {
         pendingRenodeBuffer += text
+        if pendingRenodeBuffer.count > 64_000 {
+            pendingRenodeBuffer = String(pendingRenodeBuffer.suffix(32_000))
+        }
     }
     
     public func clear(tab: Int) {
@@ -137,7 +144,8 @@ public final class TerminalLogStore: ObservableObject {
         let rawSplits = chunk.components(separatedBy: .newlines)
         for rawLine in rawSplits where !rawLine.isEmpty {
             nextLineId += 1
-            let entry = TerminalLogLine(id: nextLineId, raw: rawLine)
+            let safeLine = rawLine.count > 1000 ? (String(rawLine.prefix(1000)) + " ... [truncated]") : rawLine
+            let entry = TerminalLogLine(id: nextLineId, raw: safeLine)
             lineArray.append(entry)
         }
         
@@ -150,18 +158,21 @@ public final class TerminalLogStore: ObservableObject {
         let sourceLines = (selectedTab == 0) ? uartLines : renodeLines
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        let matching: [TerminalLogLine]
         if selectedCategory == .all && query.isEmpty {
-            self.filteredLines = sourceLines
-            return
+            matching = sourceLines
+        } else {
+            matching = sourceLines.filter { line in
+                let catMatch = (selectedCategory == .all) || (line.category == selectedCategory) || selectedCategory.matches(line: line.raw)
+                guard catMatch else { return false }
+                
+                if query.isEmpty { return true }
+                return line.raw.localizedCaseInsensitiveContains(query)
+            }
         }
         
-        self.filteredLines = sourceLines.filter { line in
-            let catMatch = (selectedCategory == .all) || (line.category == selectedCategory) || selectedCategory.matches(line: line.raw)
-            guard catMatch else { return false }
-            
-            if query.isEmpty { return true }
-            return line.raw.localizedCaseInsensitiveContains(query)
-        }
+        self.filteredLines = matching
+        self.filteredText = matching.map(\.raw).joined(separator: "\n")
     }
     
     // MARK: - Background UART File Polling

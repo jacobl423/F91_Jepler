@@ -111,43 +111,13 @@ public struct TerminalView: View {
             
             Divider()
             
-            // Console Terminal View with ANSI Color Rendering & Stable Identity
-            ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        if logStore.filteredLines.isEmpty {
-                            Text(logStore.selectedTab == 0 ? "Waiting for Zephyr UART stream / MCUboot..." : "Waiting for Renode console stream...")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.gray)
-                                .padding(10)
-                        } else {
-                            ForEach(logStore.filteredLines) { line in
-                                Text(line.attributedText)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .lineSpacing(1.5)
-                                    .textSelection(.enabled)
-                            }
-                        }
-                        
-                        Color.clear
-                            .frame(height: 1)
-                            .id("terminalBottomID")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(10)
-                }
-                .background(Color(red: 0.05, green: 0.07, blue: 0.06))
-                .onChange(of: logStore.filteredLines.count) { _ in
-                    if logStore.autoScroll {
-                        proxy.scrollTo("terminalBottomID", anchor: .bottom)
-                    }
-                }
-                .onChange(of: logStore.selectedTab) { _ in
-                    if logStore.autoScroll {
-                        proxy.scrollTo("terminalBottomID", anchor: .bottom)
-                    }
-                }
-            }
+            // Console Terminal View with ANSI Color Rendering & Rock-Solid AppKit NSTextView
+            ConsoleTerminalTextView(
+                text: logStore.filteredText,
+                placeholder: logStore.selectedTab == 0 ? "Waiting for Zephyr UART stream / MCUboot..." : "Waiting for Renode console stream...",
+                autoScroll: logStore.autoScroll
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
     
@@ -159,5 +129,83 @@ public struct TerminalView: View {
             let clean = AnsiParser.stripAnsi(from: logStore.filteredLines.map(\.raw).joined(separator: "\n"))
             try? clean.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+}
+
+public struct ConsoleTerminalTextView: NSViewRepresentable {
+    let text: String
+    let placeholder: String
+    let autoScroll: Bool
+    
+    public init(text: String, placeholder: String, autoScroll: Bool) {
+        self.text = text
+        self.placeholder = placeholder
+        self.autoScroll = autoScroll
+    }
+    
+    public func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = NSColor(red: 0.05, green: 0.07, blue: 0.06, alpha: 1.0)
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = NSColor(red: 0.05, green: 0.07, blue: 0.06, alpha: 1.0)
+        textView.textColor = NSColor(red: 0.88, green: 0.92, blue: 0.88, alpha: 1.0)
+        textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.isRichText = true
+        textView.importsGraphics = false
+        textView.drawsBackground = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        
+        return scrollView
+    }
+    
+    public func updateNSView(_ nsView: NSScrollView, context: Context) {
+        guard let textView = context.coordinator.textView else { return }
+        
+        let displayText = text.isEmpty ? placeholder : text
+        if context.coordinator.lastRenderedText != displayText {
+            context.coordinator.lastRenderedText = displayText
+            
+            if text.isEmpty {
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+                    .foregroundColor: NSColor.gray
+                ]
+                textView.textStorage?.setAttributedString(NSAttributedString(string: placeholder, attributes: attrs))
+            } else {
+                let attributed = AnsiParser.parseToNSAttributedString(text: displayText)
+                textView.textStorage?.setAttributedString(attributed)
+            }
+            
+            if autoScroll && !text.isEmpty {
+                DispatchQueue.main.async {
+                    textView.scrollToEndOfDocument(nil)
+                }
+            }
+        }
+    }
+    
+    public func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    public class Coordinator {
+        var textView: NSTextView?
+        var lastRenderedText: String = ""
+        public init() {}
     }
 }

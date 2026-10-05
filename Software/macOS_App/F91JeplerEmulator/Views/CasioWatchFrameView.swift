@@ -67,8 +67,8 @@ public struct CasioWatchFrameView: View {
                     // Button A: Top-Left (LIGHT)
                     CasioPushButton(
                         buttonName: "LIGHT",
-                        shortcutKey: "L",
-                        altKey: "1",
+                        shortcutKey: "1",
+                        altKey: "",
                         isPressed: session.pressedKeys.contains("1") || isACrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "1") },
@@ -83,8 +83,8 @@ public struct CasioWatchFrameView: View {
                     // Button B: Bottom-Left (MODE)
                     CasioPushButton(
                         buttonName: "MODE",
-                        shortcutKey: "M",
-                        altKey: "2",
+                        shortcutKey: "2",
+                        altKey: "",
                         isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "2") },
@@ -99,8 +99,8 @@ public struct CasioWatchFrameView: View {
                     // Button C: Bottom-Right (ALARM / 24HR TOGGLE)
                     CasioPushButton(
                         buttonName: "TOGGLE",
-                        shortcutKey: "A",
-                        altKey: "3",
+                        shortcutKey: "3",
+                        altKey: "",
                         isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
                         isLeft: false,
                         onDown: { session.buttonDown(key: "3") },
@@ -117,7 +117,7 @@ public struct CasioWatchFrameView: View {
                     SideButtonControlCard(
                         name: "LIGHT",
                         pin: session.pcbBoard.buttonAPin,
-                        hotkey: "L / 1",
+                        hotkey: "1",
                         isPressed: session.pressedKeys.contains("1") || isACrossProbed,
                         isLeft: true,
                         onClick: {
@@ -138,7 +138,7 @@ public struct CasioWatchFrameView: View {
                     SideButtonControlCard(
                         name: "MODE",
                         pin: session.pcbBoard.buttonBPin,
-                        hotkey: "M / 2",
+                        hotkey: "2",
                         isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
                         isLeft: true,
                         onClick: {
@@ -160,7 +160,7 @@ public struct CasioWatchFrameView: View {
                     SideButtonControlCard(
                         name: "ALARM / 24H",
                         pin: session.pcbBoard.buttonCPin,
-                        hotkey: "A / 3",
+                        hotkey: "3",
                         isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
                         isLeft: false,
                         onClick: {
@@ -224,11 +224,13 @@ struct CasioPushButton: View {
                 // Push Button Label & Shortcut Badges
                 VStack(spacing: 2) {
                     Text(shortcutKey)
-                        .font(.system(size: 12, weight: .black, design: .monospaced))
+                        .font(.system(size: altKey.isEmpty ? 14 : 12, weight: .black, design: .monospaced))
                         .foregroundColor(isPressed ? .white : Color(white: 0.15))
-                    Text(altKey)
-                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(isPressed ? .white.opacity(0.8) : Color(white: 0.4))
+                    if !altKey.isEmpty {
+                        Text(altKey)
+                            .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(isPressed ? .white.opacity(0.8) : Color(white: 0.4))
+                    }
                 }
                 .offset(x: isPressed ? (isLeft ? 3 : -3) : 0)
             }
