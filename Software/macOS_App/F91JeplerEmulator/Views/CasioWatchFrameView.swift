@@ -47,35 +47,11 @@ public struct CasioWatchFrameView: View {
                     // Live Emulated 96×39 OLED Display Overlay in Screen Window with Rounded Corners
                     let isDisplayCrossProbed = session.selectedFootprintID.uppercased().contains("J1") || session.selectedFootprintID.uppercased().contains("OLED") || session.selectedFootprintID.uppercased().contains("DISP")
                     
-                    ZStack {
-                        // Display Screen Bezel / Unlit background
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(session.oledTheme.unlitColor)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(isDisplayCrossProbed ? Color.yellow : Color(red: 0.2, green: 0.35, blue: 0.25).opacity(0.8), lineWidth: isDisplayCrossProbed ? 2.5 : 1.5)
-                            )
-                            .shadow(color: isDisplayCrossProbed ? Color.yellow.opacity(0.5) : .black.opacity(0.85), radius: isDisplayCrossProbed ? 10 : 6, x: 0, y: 2)
-                        
-                        // Live Emulated Frame Buffer
-                        if let cgImg = session.oledImage {
-                            Image(decorative: cgImg, scale: 1.0)
-                                .resizable()
-                                .interpolation(.none)
-                                .colorMultiply(session.oledTheme.litColor)
-                                .aspectRatio(96.0 / 39.0, contentMode: .fit)
-                                .padding(5)
-                        } else {
-                            VStack(spacing: 2) {
-                                Text("96×39 OLED")
-                                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                                    .foregroundColor(session.oledTheme.litColor.opacity(0.85))
-                                Text(session.isRunning ? "WAITING FOR ZEPHYR" : "OFFLINE")
-                                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
+                    CasioLiveOLEDView(
+                        displayStore: session.displayStore,
+                        isRunning: session.isRunning,
+                        isDisplayCrossProbed: isDisplayCrossProbed
+                    )
                     .frame(width: 184, height: 86)
                     .offset(x: 0, y: -8)
                     .onTapGesture {
@@ -336,3 +312,40 @@ struct SideButtonControlCard: View {
     }
 }
 
+struct CasioLiveOLEDView: View {
+    @ObservedObject var displayStore: DisplayStreamStore
+    let isRunning: Bool
+    let isDisplayCrossProbed: Bool
+    
+    var body: some View {
+        ZStack {
+            // Display Screen Bezel / Unlit background
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(displayStore.oledTheme.unlitColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(isDisplayCrossProbed ? Color.yellow : Color(red: 0.2, green: 0.35, blue: 0.25).opacity(0.8), lineWidth: isDisplayCrossProbed ? 2.5 : 1.5)
+                )
+                .shadow(color: isDisplayCrossProbed ? Color.yellow.opacity(0.5) : .black.opacity(0.85), radius: isDisplayCrossProbed ? 10 : 6, x: 0, y: 2)
+            
+            // Live Emulated Frame Buffer
+            if let cgImg = displayStore.oledImage {
+                Image(decorative: cgImg, scale: 1.0)
+                    .resizable()
+                    .interpolation(.none)
+                    .colorMultiply(displayStore.oledTheme.litColor)
+                    .aspectRatio(96.0 / 39.0, contentMode: .fit)
+                    .padding(5)
+            } else {
+                VStack(spacing: 2) {
+                    Text("96×39 OLED")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundColor(displayStore.oledTheme.litColor.opacity(0.85))
+                    Text(isRunning ? "WAITING FOR ZEPHYR" : "OFFLINE")
+                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}

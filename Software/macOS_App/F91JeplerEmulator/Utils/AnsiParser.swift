@@ -43,19 +43,35 @@ public enum LogCategory: String, CaseIterable, Identifiable {
 }
 
 public struct AnsiParser {
+    private static let stripRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "\\x1B\\[[0-9;]*[a-zA-Z]")
+    }()
+    
+    private static let ansiRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "\\x1B\\[([0-9;]*)m")
+    }()
+
     public static func stripAnsi(from text: String) -> String {
-        let pattern = "\\x1B\\[[0-9;]*[a-zA-Z]"
-        return text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        guard text.contains("\u{1B}") else { return text }
+        guard let regex = stripRegex else { return text }
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
     }
     
     public static func parseToAttributedString(text: String) -> AttributedString {
-        var result = AttributedString()
-        
-        let pattern = "\\x1B\\[([0-9;]*)m"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return AttributedString(text)
+        guard text.contains("\u{1B}") else {
+            var plain = AttributedString(text)
+            plain.foregroundColor = Color(red: 0.88, green: 0.92, blue: 0.88)
+            return plain
         }
         
+        guard let regex = ansiRegex else {
+            var fallback = AttributedString(text)
+            fallback.foregroundColor = Color(red: 0.88, green: 0.92, blue: 0.88)
+            return fallback
+        }
+        
+        var result = AttributedString()
         let nsString = text as NSString
         var currentIndex = 0
         var currentColor: Color = Color(red: 0.88, green: 0.92, blue: 0.88)

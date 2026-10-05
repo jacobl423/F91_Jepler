@@ -1,8 +1,16 @@
 import SwiftUI
 import AppKit
 
+final class PCBHUDState: ObservableObject {
+    @Published var cursorBoardPos: Point2D = Point2D(x: 0, y: 0)
+}
+
 public struct PCBCanvasView: View {
     @ObservedObject var session: EmulatorSession
+    
+    // Geometry & HUD Cache
+    @StateObject private var hudState = PCBHUDState()
+    @State private var geometryCache = PCBGeometryCache()
     
     // Zoom and Pan
     @State private var zoomScale: CGFloat = 12.0
@@ -28,7 +36,6 @@ public struct PCBCanvasView: View {
     // Hovering & Interaction
     @State private var hoveredFootprintRef: String? = nil
     @State private var hoveredPadId: String? = nil
-    @State private var cursorBoardPos: Point2D = Point2D(x: 0, y: 0)
     
     // Callback for selecting a component
     public var onSelectFootprint: ((Footprint) -> Void)? = nil
@@ -94,81 +101,42 @@ public struct PCBCanvasView: View {
                             drawGrid(ctx: ctx, size: size, centerOffset: centerOffset, boardCenterMm: boardCenterMm)
                         }
                         
+                        let transform = CGAffineTransform(translationX: centerOffset.x, y: centerOffset.y)
+                            .scaledBy(x: zoomScale, y: zoomScale)
+                        
                         // 2. Copper Zones
                         if showBCu {
-                            for zone in board.zones where zone.layer.contains("B.Cu") {
-                                drawZone(ctx: ctx, zone: zone, toCanvas: toCanvas, color: Color(red: 0.15, green: 0.40, blue: 0.65).opacity(0.25))
-                            }
+                            ctx.fill(geometryCache.bottomZonesPath.applying(transform), with: .color(Color(red: 0.15, green: 0.40, blue: 0.65).opacity(0.25)))
                         }
                         if showFCu {
-                            for zone in board.zones where zone.layer.contains("F.Cu") {
-                                drawZone(ctx: ctx, zone: zone, toCanvas: toCanvas, color: Color(red: 0.75, green: 0.45, blue: 0.15).opacity(0.25))
-                            }
+                            ctx.fill(geometryCache.topZonesPath.applying(transform), with: .color(Color(red: 0.75, green: 0.45, blue: 0.15).opacity(0.25)))
                         }
                         
-                        // 3. Copper Tracks (Culling applied)
+                        // 3. Copper Tracks
                         if showBCu {
-                            for track in board.tracks where track.layer.contains("B.Cu") {
-                                if trackInBounds(track, minX: viewMinX, maxX: viewMaxX, minY: viewMinY, maxY: viewMaxY) {
-                                    drawTrack(ctx: ctx, track: track, toCanvas: toCanvas, color: Color(red: 0.25, green: 0.55, blue: 0.85))
-                                }
-                            }
+                            ctx.stroke(geometryCache.bottomCopperTracksPath.applying(transform), with: .color(Color(red: 0.25, green: 0.55, blue: 0.85)), lineWidth: max(1.0, 0.25 * zoomScale))
                         }
                         if showFCu {
-                            for track in board.tracks where track.layer.contains("F.Cu") {
-                                if trackInBounds(track, minX: viewMinX, maxX: viewMaxX, minY: viewMinY, maxY: viewMaxY) {
-                                    drawTrack(ctx: ctx, track: track, toCanvas: toCanvas, color: Color(red: 0.85, green: 0.55, blue: 0.20))
-                                }
-                            }
+                            ctx.stroke(geometryCache.topCopperTracksPath.applying(transform), with: .color(Color(red: 0.85, green: 0.55, blue: 0.20)), lineWidth: max(1.0, 0.25 * zoomScale))
                         }
                         
                         // 4. Vias
-                        for via in board.vias {
-                            if via.position.x >= viewMinX && via.position.x <= viewMaxX &&
-                               via.position.y >= viewMinY && via.position.y <= viewMaxY {
-                                let c = toCanvas(via.position)
-                                let r = CGFloat(via.size / 2.0) * zoomScale
-                                let drillR = CGFloat(via.drill / 2.0) * zoomScale
-                                ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(Color(red: 0.8, green: 0.7, blue: 0.3)))
-                                ctx.fill(Path(ellipseIn: CGRect(x: c.x - drillR, y: c.y - drillR, width: drillR * 2, height: drillR * 2)), with: .color(Color(white: 0.08)))
-                            }
-                        }
+                        ctx.fill(geometryCache.viasPath.applying(transform), with: .color(Color(red: 0.8, green: 0.7, blue: 0.3)))
+                        ctx.fill(geometryCache.viasDrillPath.applying(transform), with: .color(Color(white: 0.08)))
                         
                         // 5. Board Outline (Edge.Cuts)
                         if showEdgeCuts {
-                            var outlinePath = Path()
-                            for seg in board.edgeSegments {
-                                switch seg {
-                                case .line(let start, let end):
-                                    outlinePath.move(to: toCanvas(start))
-                                    outlinePath.addLine(to: toCanvas(end))
-                                case .arc(let start, let mid, let end):
-                                    let s = toCanvas(start)
-                                    let m = toCanvas(mid)
-                                    let e = toCanvas(end)
-                                    outlinePath.move(to: s)
-                                    outlinePath.addQuadCurve(to: e, control: m)
-                                case .circle(let center, let radius):
-                                    let c = toCanvas(center)
-                                    let r = CGFloat(radius) * zoomScale
-                                    outlinePath.addEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
-                                }
-                            }
-                            ctx.stroke(outlinePath, with: .color(Color(red: 0.95, green: 0.85, blue: 0.35)), lineWidth: max(1.5, 0.15 * zoomScale))
+                            ctx.stroke(geometryCache.edgeCutsPath.applying(transform), with: .color(Color(red: 0.95, green: 0.85, blue: 0.35)), lineWidth: max(1.5, 0.15 * zoomScale))
                         }
                         
                         // 6. User Drawings & Dimension Annotations
                         if showDrawings {
-                            for dwg in board.drawings where dwg.layer != "Edge.Cuts" && !dwg.layer.contains("Silk") {
-                                drawDrawing(ctx: ctx, drawing: dwg, toCanvas: toCanvas)
-                            }
+                            ctx.stroke(geometryCache.userDrawingsPath.applying(transform), with: .color(Color(white: 0.6)), lineWidth: max(1.0, 0.15 * zoomScale))
                         }
                         
                         // 7. Silkscreen Markings
                         if showSilk {
-                            for dwg in board.drawings where dwg.layer.contains("Silk") {
-                                drawDrawing(ctx: ctx, drawing: dwg, toCanvas: toCanvas)
-                            }
+                            ctx.stroke(geometryCache.silkscreenPath.applying(transform), with: .color(Color.white.opacity(0.85)), lineWidth: max(1.0, 0.15 * zoomScale))
                         }
                         
                         // 8. Footprints & Pads (Culled for smooth 60 FPS)
@@ -186,68 +154,8 @@ public struct PCBCanvasView: View {
                         }
                     }
                     
-                    // Floating HUD: Coordinates, Selection & Net Info
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 12) {
-                            // Coordinate Badge
-                            HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 9))
-                                Text(String(format: "X: %.2f mm  Y: %.2f mm", cursorBoardPos.x, cursorBoardPos.y))
-                                    .font(.system(size: 10, design: .monospaced))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(white: 0.12).opacity(0.85))
-                            .cornerRadius(6)
-                            
-                            // Selected Net Highlight Badge
-                            if let net = session.selectedNetName, !net.isEmpty {
-                                HStack(spacing: 5) {
-                                    Circle().fill(Color.cyan).frame(width: 7, height: 7)
-                                    Text("Highlighted Net: \(net)")
-                                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                    Button(action: { session.selectedNetName = nil }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 10))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.cyan.opacity(0.2))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.5), lineWidth: 1))
-                                .cornerRadius(6)
-                            }
-                            
-                            // Selected Component Badge
-                            if !session.selectedFootprintID.isEmpty, let fp = session.pcbBoard.footprint(reference: session.selectedFootprintID) {
-                                HStack(spacing: 5) {
-                                    Circle().fill(Color.yellow).frame(width: 7, height: 7)
-                                    Text("\(fp.reference) (\(fp.value))")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.yellow.opacity(0.18))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.yellow.opacity(0.5), lineWidth: 1))
-                                .cornerRadius(6)
-                            }
-                            
-                            Spacer()
-                            
-                            // Zoom Indicator
-                            Text("\(Int(zoomScale * 10))% zoom")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(white: 0.12).opacity(0.85))
-                                .cornerRadius(6)
-                        }
-                        .padding(10)
-                    }
+                    // Floating HUD: Coordinates, Selection & Net Info (Decoupled from Canvas)
+                    PCBCoordinateHUD(hudState: hudState, session: session, zoomScale: zoomScale)
                 }
                 .contentShape(Rectangle())
                 // Hover Tracking for Coordinates & Footprint detection
@@ -258,28 +166,21 @@ public struct PCBCanvasView: View {
                             x: geo.size.width / 2.0 + panOffset.width,
                             y: geo.size.height / 2.0 + panOffset.height
                         )
-                        let boardCenterMm = Point2D(
-                            x: (board.minX + board.maxX) / 2.0,
-                            y: (board.minY + board.maxY) / 2.0
-                        )
+                        let boardCenterMm = geometryCache.boardCenterMm
                         let boardPt = Point2D(
                             x: boardCenterMm.x + Double(location.x - centerOffset.x) / Double(zoomScale),
                             y: boardCenterMm.y + Double(location.y - centerOffset.y) / Double(zoomScale)
                         )
-                        self.cursorBoardPos = boardPt
+                        hudState.cursorBoardPos = boardPt
                         
-                        // Check if hovering over any footprint
-                        var foundFp: Footprint? = nil
-                        for fp in board.footprints {
-                            if boardPt.distance(to: fp.position) < 2.0 {
-                                foundFp = fp
-                                break
-                            }
+                        let foundFp = geometryCache.findFootprint(at: boardPt)
+                        if self.hoveredFootprintRef != foundFp {
+                            self.hoveredFootprintRef = foundFp
                         }
-                        self.hoveredFootprintRef = foundFp?.reference
-                        
                     case .ended:
-                        self.hoveredFootprintRef = nil
+                        if self.hoveredFootprintRef != nil {
+                            self.hoveredFootprintRef = nil
+                        }
                     }
                 }
                 // Drag Gesture (Pan or Ruler)
@@ -332,7 +233,7 @@ public struct PCBCanvasView: View {
                 .simultaneousGesture(
                     TapGesture(count: 1)
                         .onEnded {
-                            handleCanvasTap(at: cursorBoardPos)
+                            handleCanvasTap(at: hudState.cursorBoardPos)
                         }
                 )
                 // Context Menu on Right Click
@@ -381,6 +282,13 @@ public struct PCBCanvasView: View {
                 }
                 .onAppear {
                     fitToBoard(in: geo.size)
+                    geometryCache.rebuild(board: session.pcbBoard)
+                }
+                .onChange(of: session.pcbBoard.footprints.count) { _ in
+                    geometryCache.rebuild(board: session.pcbBoard)
+                }
+                .onChange(of: session.pcbBoard.tracks.count) { _ in
+                    geometryCache.rebuild(board: session.pcbBoard)
                 }
             }
             }
@@ -812,3 +720,74 @@ struct ButtonTag: View {
         )
     }
 }
+
+struct PCBCoordinateHUD: View {
+    @ObservedObject var hudState: PCBHUDState
+    @ObservedObject var session: EmulatorSession
+    let zoomScale: CGFloat
+    
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 12) {
+                // Coordinate Badge
+                HStack(spacing: 4) {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 9))
+                    Text(String(format: "X: %.2f mm  Y: %.2f mm", hudState.cursorBoardPos.x, hudState.cursorBoardPos.y))
+                        .font(.system(size: 10, design: .monospaced))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(white: 0.12).opacity(0.85))
+                .cornerRadius(6)
+                
+                // Selected Net Highlight Badge
+                if let net = session.selectedNetName, !net.isEmpty {
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.cyan).frame(width: 7, height: 7)
+                        Text("Highlighted Net: \(net)")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        Button(action: { session.selectedNetName = nil }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.2))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.5), lineWidth: 1))
+                    .cornerRadius(6)
+                }
+                
+                // Selected Component Badge
+                if !session.selectedFootprintID.isEmpty, let fp = session.pcbBoard.footprint(reference: session.selectedFootprintID) {
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.yellow).frame(width: 7, height: 7)
+                        Text("\(fp.reference) (\(fp.value))")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.18))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.yellow.opacity(0.5), lineWidth: 1))
+                    .cornerRadius(6)
+                }
+                
+                Spacer()
+                
+                // Zoom Indicator
+                Text("\(Int(zoomScale * 10))% zoom")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(white: 0.12).opacity(0.85))
+                    .cornerRadius(6)
+            }
+            .padding(10)
+        }
+    }
+}
+

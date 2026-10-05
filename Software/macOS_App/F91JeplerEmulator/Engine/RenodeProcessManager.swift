@@ -143,11 +143,34 @@ public final class RenodeProcessManager {
         proc.standardError = pipe
         self.outputPipe = pipe
         
+        let coalesceQueue = DispatchQueue(label: "org.jepler.outputcoalesce", qos: .utility)
+        var coalesceBuffer = ""
+        var flushTimerScheduled = false
+        
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            if !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
-                DispatchQueue.main.async {
-                    self?.onOutputReceived?(str)
+            guard !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else { return }
+            
+            coalesceQueue.async {
+                coalesceBuffer += str
+                if coalesceBuffer.count > 2048 {
+                    let toFlush = coalesceBuffer
+                    coalesceBuffer = ""
+                    DispatchQueue.main.async {
+                        self?.onOutputReceived?(toFlush)
+                    }
+                } else if !flushTimerScheduled {
+                    flushTimerScheduled = true
+                    coalesceQueue.asyncAfter(deadline: .now() + .milliseconds(40)) {
+                        let toFlush = coalesceBuffer
+                        coalesceBuffer = ""
+                        flushTimerScheduled = false
+                        if !toFlush.isEmpty {
+                            DispatchQueue.main.async {
+                                self?.onOutputReceived?(toFlush)
+                            }
+                        }
+                    }
                 }
             }
         }

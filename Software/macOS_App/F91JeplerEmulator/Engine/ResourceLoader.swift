@@ -2,11 +2,24 @@ import Foundation
 import AppKit
 
 public enum ResourceLoader {
+    private static let imageCache = NSCache<NSString, NSImage>()
+    private static var urlCache = [String: URL]()
+    private static let cacheLock = NSLock()
+
     public static func url(forResource name: String, withExtension ext: String) -> URL? {
-        // 1. Subdirectory "Resources/Embedded"
-        if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Resources/Embedded") {
-            return url
+        let cacheKey = "\(name).\(ext)"
+        cacheLock.lock()
+        if let cached = urlCache[cacheKey] {
+            cacheLock.unlock()
+            return cached
         }
+        cacheLock.unlock()
+        
+        let foundURL: URL? = {
+            // 1. Subdirectory "Resources/Embedded"
+            if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Resources/Embedded") {
+                return url
+            }
         // 2. Subdirectory "Embedded"
         if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Embedded") {
             return url
@@ -46,12 +59,26 @@ public enum ResourceLoader {
             }
         }
         
-        return nil
+            return nil
+        }()
+        
+        if let found = foundURL {
+            cacheLock.lock()
+            urlCache[cacheKey] = found
+            cacheLock.unlock()
+        }
+        return foundURL
     }
     
     public static func image(named name: String) -> NSImage? {
-        if let url = url(forResource: name, withExtension: "png") {
-            return NSImage(contentsOf: url)
+        let key = name as NSString
+        if let cached = imageCache.object(forKey: key) {
+            return cached
+        }
+        if let url = url(forResource: name, withExtension: "png"),
+           let img = NSImage(contentsOf: url) {
+            imageCache.setObject(img, forKey: key)
+            return img
         }
         return nil
     }

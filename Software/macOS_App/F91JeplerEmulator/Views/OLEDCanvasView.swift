@@ -2,17 +2,19 @@ import SwiftUI
 import CoreGraphics
 
 public struct OLEDCanvasView: View {
+    @ObservedObject var displayStore: DisplayStreamStore
     @ObservedObject var session: EmulatorSession
     
     public init(session: EmulatorSession) {
         self.session = session
+        self.displayStore = session.displayStore
     }
     
     public var body: some View {
         VStack(spacing: 8) {
             // Display Toolbar (Theme picker, Grid toggle, Statistics)
             HStack(spacing: 12) {
-                Picker("OLED Color Theme", selection: $session.oledTheme) {
+                Picker("OLED Color Theme", selection: $displayStore.oledTheme) {
                     ForEach(OLEDTheme.allCases) { theme in
                         Text(theme.rawValue).tag(theme)
                     }
@@ -20,7 +22,7 @@ public struct OLEDCanvasView: View {
                 .pickerStyle(.menu)
                 .frame(width: 170)
                 
-                Toggle("Pixel Grid Mesh", isOn: $session.showPixelGridMesh)
+                Toggle("Pixel Grid Mesh", isOn: $displayStore.showPixelGridMesh)
                     .toggleStyle(.checkbox)
                     .font(.system(size: 11))
                 
@@ -32,16 +34,16 @@ public struct OLEDCanvasView: View {
                         Text("FPS:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text(String(format: "%.1f", session.displayMetrics.fps))
+                        Text(String(format: "%.1f", displayStore.displayMetrics.fps))
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(session.displayMetrics.fps > 5 ? .green : .orange)
+                            .foregroundColor(displayStore.displayMetrics.fps > 5 ? .green : .orange)
                     }
                     
                     HStack(spacing: 4) {
                         Text("Frames:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text("\(session.displayMetrics.frameCount)")
+                        Text("\(displayStore.displayMetrics.frameCount)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundColor(.primary)
                     }
@@ -50,7 +52,7 @@ public struct OLEDCanvasView: View {
                         Text("Draw Calls:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text("\(session.displayMetrics.drawCallCount)")
+                        Text("\(displayStore.displayMetrics.drawCallCount)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundColor(.primary)
                     }
@@ -59,7 +61,7 @@ public struct OLEDCanvasView: View {
                         Text("Lit:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text("\(session.displayMetrics.litPixelCount)")
+                        Text("\(displayStore.displayMetrics.litPixelCount)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundColor(.cyan)
                     }
@@ -76,24 +78,24 @@ public struct OLEDCanvasView: View {
             ZStack {
                 // Background Glass
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(session.oledTheme.unlitColor)
+                    .fill(displayStore.oledTheme.unlitColor)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(session.oledTheme.bezelBorderColor, lineWidth: 2)
+                            .stroke(displayStore.oledTheme.bezelBorderColor, lineWidth: 2)
                     )
                     .shadow(color: .black.opacity(0.8), radius: 8, x: 0, y: 4)
                 
-                if let cgImg = session.oledImage {
+                if let cgImg = displayStore.oledImage {
                     // Crisp integer nearest-neighbor pixel rendering
                     Image(decorative: cgImg, scale: 1.0)
                         .resizable()
                         .interpolation(.none)
-                        .colorMultiply(session.oledTheme.litColor)
+                        .colorMultiply(displayStore.oledTheme.litColor)
                         .aspectRatio(96.0 / 39.0, contentMode: .fit)
                         .padding(12)
                         .overlay(
                             Group {
-                                if session.showPixelGridMesh {
+                                if displayStore.showPixelGridMesh {
                                     PixelGridOverlay(width: 96, height: 39)
                                         .padding(12)
                                 }
@@ -103,10 +105,10 @@ public struct OLEDCanvasView: View {
                     VStack(spacing: 6) {
                         Image(systemName: "display")
                             .font(.system(size: 28))
-                            .foregroundColor(session.oledTheme.litColor.opacity(0.6))
+                            .foregroundColor(displayStore.oledTheme.litColor.opacity(0.6))
                         Text("96 × 39 SSD1306 OLED")
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(session.oledTheme.litColor)
+                            .foregroundColor(displayStore.oledTheme.litColor)
                         Text(session.isRunning ? "Ingesting I2C Framebuffer (0x3C)..." : "Renode Emulation Inactive")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -144,6 +146,7 @@ public struct PixelGridOverlay: View {
             }
             context.stroke(path, with: .color(Color.black.opacity(0.25)), lineWidth: 0.5)
         }
+        .drawingGroup()
         .allowsHitTesting(false)
     }
 }

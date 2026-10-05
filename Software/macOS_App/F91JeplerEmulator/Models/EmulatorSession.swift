@@ -36,27 +36,59 @@ public final class EmulatorSession: ObservableObject {
     @Published public var selectedViewMode: ViewMode = .split
     @Published public var watchPanelHeight: CGFloat = 340
     @Published public var terminalPanelHeight: CGFloat = 280
-    @Published public var uartLogs: String = ""
-    @Published public var processOutputBuffer: String = ""
-    @Published public var oledImage: CGImage? = nil
-    
-    // OLED Canvas & Themes (Module B)
-    @Published public var oledTheme: OLEDTheme = .cyan
-    @Published public var showPixelGridMesh: Bool = true
-    @Published public var displayMetrics = DisplayMetrics()
-    private var lastFrameTimes: [Double] = []
-    
-    // Inputs & GPIO (Module A & C)
     @Published public var pressedKeys: Set<String> = [] // "1" (Light), "2" (Mode), "3" (Toggle)
     @Published public var pcbBoard: KiCadBoard = KiCadBoard()
     @Published public var comparisonPCBURL: URL? = nil
     @Published public var pcbDiffResult: PCBBoardDiffResult? = nil
     
-    // Terminal Filters (Module A)
-    @Published public var selectedLogCategory: LogCategory = .all
-    @Published public var terminalSearchText: String = ""
-    @Published public var terminalAutoScroll: Bool = true
-    @Published public var selectedTerminalTab: Int = 0 // 0: Zephyr UART, 1: Renode Console
+    public let logStore = TerminalLogStore.shared
+    public let displayStore = DisplayStreamStore.shared
+    
+    // Backwards-compatible accessors for logs
+    public var uartLogs: String {
+        get { logStore.rawUartString }
+        set { logStore.appendUart(text: newValue) }
+    }
+    public var processOutputBuffer: String {
+        get { logStore.rawRenodeString }
+        set { logStore.appendRenodeConsole(text: newValue) }
+    }
+    
+    // Backwards-compatible accessors for display
+    public var oledImage: CGImage? {
+        get { displayStore.oledImage }
+        set { displayStore.oledImage = newValue }
+    }
+    public var oledTheme: OLEDTheme {
+        get { displayStore.oledTheme }
+        set { displayStore.oledTheme = newValue }
+    }
+    public var showPixelGridMesh: Bool {
+        get { displayStore.showPixelGridMesh }
+        set { displayStore.showPixelGridMesh = newValue }
+    }
+    public var displayMetrics: DisplayMetrics {
+        get { displayStore.displayMetrics }
+        set { displayStore.displayMetrics = newValue }
+    }
+    
+    // Terminal Filters (forwarded to logStore)
+    public var selectedLogCategory: LogCategory {
+        get { logStore.selectedCategory }
+        set { logStore.selectedCategory = newValue }
+    }
+    public var terminalSearchText: String {
+        get { logStore.searchText }
+        set { logStore.searchText = newValue }
+    }
+    public var terminalAutoScroll: Bool {
+        get { logStore.autoScroll }
+        set { logStore.autoScroll = newValue }
+    }
+    public var selectedTerminalTab: Int {
+        get { logStore.selectedTab }
+        set { logStore.selectedTab = newValue }
+    }
     
     // GATT Injector (Module D)
     @Published public var gattLogs: [GATTLogEntry] = []
@@ -115,9 +147,6 @@ public final class EmulatorSession: ObservableObject {
     private let processManager = RenodeProcessManager()
     private let socketClient = RenodeSocketClient()
     private let uartSocketClient = RenodeUartSocketClient()
-    private var uartFileTimer: Timer?
-    private var lastUartFileOffset: UInt64 = 0
-    private var frameTimer: Timer?
     private var framePpmURL: URL?
     
     public init() {
@@ -161,11 +190,17 @@ public final class EmulatorSession: ObservableObject {
         let pcbCandidate = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
         if let embeddedPCB = pcbCandidate {
             self.activePCBURL = embeddedPCB
-            if let board = try? KiCadParser.parse(fileURL: embeddedPCB) {
-                self.pcbBoard = board
-                validateActiveBoard()
+            Task { [weak self] in
+                if let board = try? await KiCadParser.parseAsync(fileURL: embeddedPCB) {
+                    await MainActor.run {
+                        self?.pcbBoard = board
+                        self?.validateActiveBoard()
+                    }
+                }
+                await MainActor.run {
+                    self?.startWatchingActivePCB()
+                }
             }
-            startWatchingActivePCB()
         }
     }
     
@@ -181,20 +216,25 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func reloadPCB(fileURL: URL) {
-        guard let board = try? KiCadParser.parse(fileURL: fileURL) else { return }
-        self.pcbBoard = board
-        validateActiveBoard()
-        
-        self.pcbReloadToast = "Auto-reloaded '\(fileURL.lastPathComponent)' from KiCad"
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if self.pcbReloadToast?.contains(fileURL.lastPathComponent) == true {
-                self.pcbReloadToast = nil
+        Task { [weak self] in
+            guard let board = try? await KiCadParser.parseAsync(fileURL: fileURL) else { return }
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                self.pcbBoard = board
+                self.validateActiveBoard()
+                
+                self.pcbReloadToast = "Auto-reloaded '\(fileURL.lastPathComponent)' from KiCad"
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    if self.pcbReloadToast?.contains(fileURL.lastPathComponent) == true {
+                        self.pcbReloadToast = nil
+                    }
+                }
+                
+                if self.show3DRenderMode {
+                    self.trigger3DRender()
+                }
             }
-        }
-        
-        if show3DRenderMode {
-            trigger3DRender()
         }
     }
     
@@ -338,8 +378,7 @@ public final class EmulatorSession: ObservableObject {
             
             processManager.onOutputReceived = { [weak self] str in
                 Task { @MainActor [weak self] in
-                    guard let self = self else { return }
-                    self.processOutputBuffer += str
+                    self?.logStore.appendRenodeConsole(text: str)
                 }
             }
             
@@ -368,11 +407,20 @@ public final class EmulatorSession: ObservableObject {
             // Connect monitor socket
             self.socketClient.connect(port: port)
             
-            // Start polling UART file backend for live MCUboot & Zephyr logs
-            self.lastUartFileOffset = 0
-            startUartFilePolling()
+            // Start background polling for UART logs
+            if let uartFile = self.processManager.uartLogURL {
+                self.logStore.startBackgroundUartTail(fileURL: uartFile)
+            }
             
-            startFramePolling()
+            // Start background frame ingestion
+            if let ppmURL = self.framePpmURL {
+                self.displayStore.startPolling(
+                    socketSender: { [weak self] cmd in
+                        self?.socketClient.send(command: cmd)
+                    },
+                    ppmURL: ppmURL
+                )
+            }
             
         } catch {
             self.errorMessage = "Failed to launch Renode: \(error.localizedDescription)"
@@ -444,113 +492,6 @@ public final class EmulatorSession: ObservableObject {
         socketClient.send(command: "sysbus.gpioPortA OnGPIO 12 true")
         socketClient.send(command: "sysbus.gpioPortA OnGPIO 24 true")
         socketClient.send(command: "start")
-    }
-    
-    // MARK: - Log Polling & Frame Buffer Ingestion (Module A & B)
-    
-    private func startUartFilePolling() {
-        uartFileTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.pollUartLogFile()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.uartFileTimer = timer
-    }
-    
-    private func pollUartLogFile() {
-        guard let url = self.processManager.uartLogURL else { return }
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        guard let fileHandle = try? FileHandle(forReadingFrom: url) else { return }
-        defer { try? fileHandle.close() }
-        
-        let fileSize = fileHandle.seekToEndOfFile()
-        if fileSize > self.lastUartFileOffset {
-            fileHandle.seek(toFileOffset: self.lastUartFileOffset)
-            let newData = fileHandle.readDataToEndOfFile()
-            self.lastUartFileOffset = fileSize
-            if let str = String(data: newData, encoding: .utf8) ?? String(data: newData, encoding: .ascii), !str.isEmpty {
-                self.uartLogs += str
-                if self.uartLogs.count > 64000 {
-                    self.uartLogs = String(self.uartLogs.suffix(32000))
-                }
-            }
-        }
-    }
-    
-    private func startFramePolling() {
-        frameTimer?.invalidate()
-        guard let ppmURL = self.framePpmURL else { return }
-        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.socketClient.send(command: "sysbus.twi0.display SaveFrame \"\(ppmURL.path)\"")
-                self.ingestFrameFile(at: ppmURL)
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.frameTimer = timer
-    }
-    
-    private func ingestFrameFile(at ppmURL: URL) {
-        guard let data = try? Data(contentsOf: ppmURL) else { return }
-        let startTime = CFAbsoluteTimeGetCurrent()
-        if let (cgImg, litPixels) = decodePPMImage(data: data) {
-            let latencyMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
-            self.oledImage = cgImg
-            self.displayMetrics.frameCount += 1
-            self.displayMetrics.drawCallCount += 1
-            self.displayMetrics.litPixelCount = litPixels
-            self.displayMetrics.lastFrameLatencyMs = latencyMs
-            
-            // FPS Tracking
-            let now = CFAbsoluteTimeGetCurrent()
-            lastFrameTimes.append(now)
-            lastFrameTimes.removeAll { now - $0 > 1.0 }
-            self.displayMetrics.fps = Double(lastFrameTimes.count)
-        }
-    }
-    
-    private nonisolated func decodePPMImage(data: Data) -> (CGImage, Int)? {
-        guard let strHeader = String(data: data.prefix(100), encoding: .ascii) else { return nil }
-        let components = strHeader.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-        guard components.count >= 4, components[0] == "P6" else { return nil }
-        guard let width = Int(components[1]), let height = Int(components[2]), components[3] == "255" else { return nil }
-        
-        let expectedPixelBytes = width * height * 3
-        guard data.count >= expectedPixelBytes else { return nil }
-        let pixelData = data.suffix(expectedPixelBytes)
-        
-        var litCount = 0
-        pixelData.withUnsafeBytes { rawPtr in
-            guard let ptr = rawPtr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
-            for i in stride(from: 0, to: expectedPixelBytes, by: 3) {
-                if ptr[i] > 10 {
-                    litCount += 1
-                }
-            }
-        }
-        
-        let provider = CGDataProvider(data: pixelData as CFData)
-        guard let provider = provider else { return nil }
-        
-        let cgImg = CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 24,
-            bytesPerRow: width * 3,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: false,
-            intent: .defaultIntent
-        )
-        guard let img = cgImg else { return nil }
-        return (img, litCount)
     }
     
     // MARK: - GATT Test Injector & BLE Control Panel (Module D)
@@ -686,11 +627,9 @@ public final class EmulatorSession: ObservableObject {
     
     public func stopSession() {
         cancelSequence()
-        uartFileTimer?.invalidate()
-        uartFileTimer = nil
+        logStore.stopBackgroundUartTail()
+        displayStore.stopPolling()
         uartSocketClient.disconnect()
-        frameTimer?.invalidate()
-        frameTimer = nil
         socketClient.disconnect()
         processManager.stop()
         isRunning = false
@@ -699,10 +638,12 @@ public final class EmulatorSession: ObservableObject {
     
     deinit {
         activeSequenceTask?.cancel()
-        uartFileTimer?.invalidate()
         uartSocketClient.disconnect()
-        frameTimer?.invalidate()
         socketClient.disconnect()
         processManager.stop()
+        Task { @MainActor in
+            TerminalLogStore.shared.stopBackgroundUartTail()
+            DisplayStreamStore.shared.stopPolling()
+        }
     }
 }

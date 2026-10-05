@@ -25,6 +25,12 @@ public final class KiCadParser {
         return board
     }
     
+    public static func parseAsync(fileURL: URL) async throws -> KiCadBoard {
+        try await Task.detached(priority: .userInitiated) {
+            try parse(fileURL: fileURL)
+        }.value
+    }
+    
     public static func parse(content: String) -> KiCadBoard {
         let tokens = tokenize(content)
         var index = 0
@@ -36,32 +42,55 @@ public final class KiCadParser {
     
     private static func tokenize(_ text: String) -> [String] {
         var tokens: [String] = []
-        var current = ""
-        var inQuote = false
+        tokens.reserveCapacity(min(text.count / 8, 50000))
         
-        for char in text {
-            if char == "\"" {
+        let utf8 = text.utf8
+        var startIdx = utf8.startIndex
+        var inQuote = false
+        var hasToken = false
+        
+        var i = utf8.startIndex
+        while i < utf8.endIndex {
+            let byte = utf8[i]
+            if byte == 0x22 { // '"'
                 inQuote.toggle()
-                current.append(char)
-            } else if inQuote {
-                current.append(char)
-            } else if char == "(" || char == ")" {
-                if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    tokens.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
-                    current = ""
+                if !hasToken {
+                    startIdx = i
+                    hasToken = true
                 }
-                tokens.append(String(char))
-            } else if char.isWhitespace {
-                if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    tokens.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
-                    current = ""
+            } else if inQuote {
+                // Inside quote, consume
+            } else if byte == 0x28 || byte == 0x29 { // '(' or ')'
+                if hasToken {
+                    if let str = String(utf8[startIdx..<i]) {
+                        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty { tokens.append(trimmed) }
+                    }
+                    hasToken = false
+                }
+                tokens.append(byte == 0x28 ? "(" : ")")
+            } else if byte <= 0x20 { // whitespace
+                if hasToken {
+                    if let str = String(utf8[startIdx..<i]) {
+                        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty { tokens.append(trimmed) }
+                    }
+                    hasToken = false
                 }
             } else {
-                current.append(char)
+                if !hasToken {
+                    startIdx = i
+                    hasToken = true
+                }
             }
+            i = utf8.index(after: i)
         }
-        if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            tokens.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
+        
+        if hasToken {
+            if let str = String(utf8[startIdx..<i]) {
+                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { tokens.append(trimmed) }
+            }
         }
         return tokens
     }
