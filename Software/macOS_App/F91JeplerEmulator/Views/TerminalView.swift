@@ -109,7 +109,7 @@ public struct TerminalView: View {
                     
                     Spacer()
                     
-                    Text("\(logStore.filteredLines.count) lines")
+                    Text("\(logStore.filteredLines.count.formatted()) lines")
                         .font(.system(size: 9.5, design: .monospaced))
                         .foregroundColor(.secondary)
                 }

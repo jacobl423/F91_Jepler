@@ -33,8 +33,6 @@ public struct TerminalLogLine: Identifiable, Equatable {
 public final class TerminalLogStore: ObservableObject {
     public static let shared = TerminalLogStore()
     
-    // Line capacity limit for constant memory footprint
-    private let maxLineCapacity: Int = 800
     private var nextLineId: Int = 0
     
     // Tab 0: UART lines, Tab 1: Renode Monitor lines
@@ -88,9 +86,6 @@ public final class TerminalLogStore: ObservableObject {
     
     public func appendUart(text: String) {
         pendingUartBuffer += text
-        if pendingUartBuffer.count > 64_000 {
-            pendingUartBuffer = String(pendingUartBuffer.suffix(32_000))
-        }
     }
     
     public func appendRenodeConsole(text: String) {
@@ -116,9 +111,6 @@ public final class TerminalLogStore: ObservableObject {
         }
         
         pendingRenodeBuffer += cleaned
-        if pendingRenodeBuffer.count > 64_000 {
-            pendingRenodeBuffer = String(pendingRenodeBuffer.suffix(32_000))
-        }
     }
     
     public func clear(tab: Int) {
@@ -174,13 +166,9 @@ public final class TerminalLogStore: ObservableObject {
             if trimmed.contains("SaveFrame") { continue }
             
             nextLineId += 1
-            let safeLine = rawLine.count > 1200 ? (String(rawLine.prefix(1200)) + " ... [truncated]") : rawLine
+            let safeLine = rawLine.count > 8192 ? (String(rawLine.prefix(8192)) + " ... [truncated]") : rawLine
             let entry = TerminalLogLine(id: nextLineId, raw: safeLine)
             lineArray.append(entry)
-        }
-        
-        if lineArray.count > maxLineCapacity {
-            lineArray.removeFirst(lineArray.count - maxLineCapacity)
         }
     }
     
