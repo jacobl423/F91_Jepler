@@ -25,7 +25,7 @@ public final class DisplayStreamStore: ObservableObject {
     public func startPolling(socketSender: @escaping (String) -> Void, ppmURL: URL) {
         stopPolling()
         
-        let timer = Timer(timeInterval: 0.10, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.125, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 socketSender("sysbus.twi0.display SaveFrame \"\(ppmURL.path)\"")

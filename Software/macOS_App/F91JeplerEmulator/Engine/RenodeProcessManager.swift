@@ -8,6 +8,7 @@ public final class RenodeProcessManager {
     public private(set) var uartLogURL: URL?
     public private(set) var outputPipe = Pipe()
     public var onOutputReceived: ((String) -> Void)?
+    public var onTerminated: ((Int32) -> Void)?
     
     public init() {
         NotificationCenter.default.addObserver(
@@ -149,7 +150,11 @@ public final class RenodeProcessManager {
         
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else { return }
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            guard let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else { return }
             
             coalesceQueue.async {
                 coalesceBuffer += str
@@ -172,6 +177,12 @@ public final class RenodeProcessManager {
                         }
                     }
                 }
+            }
+        }
+        
+        proc.terminationHandler = { [weak self] p in
+            DispatchQueue.main.async {
+                self?.onTerminated?(p.terminationStatus)
             }
         }
         

@@ -382,6 +382,14 @@ public final class EmulatorSession: ObservableObject {
                 }
             }
             
+            processManager.onTerminated = { [weak self] status in
+                Task { @MainActor [weak self] in
+                    guard let self = self, self.isRunning else { return }
+                    self.stopSession()
+                    self.statusMessage = "Renode Exited (Code \(status))"
+                }
+            }
+            
             if let workDir = processManager.workDir {
                 self.framePpmURL = workDir.appendingPathComponent("screen.ppm")
             }

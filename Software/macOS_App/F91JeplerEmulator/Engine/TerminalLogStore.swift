@@ -5,13 +5,11 @@ import Combine
 public struct TerminalLogLine: Identifiable, Equatable {
     public let id: Int
     public let raw: String
-    public let attributedText: AttributedString
     public let category: LogCategory
     
     public init(id: Int, raw: String) {
         self.id = id
         self.raw = raw
-        self.attributedText = AnsiParser.parseToAttributedString(text: raw)
         
         // Categorize line
         var detected: LogCategory = .all
@@ -30,7 +28,7 @@ public final class TerminalLogStore: ObservableObject {
     public static let shared = TerminalLogStore()
     
     // Line capacity limit for constant memory footprint
-    private let maxLineCapacity: Int = 1000
+    private let maxLineCapacity: Int = 600
     private var nextLineId: Int = 0
     
     // Tab 0: UART lines, Tab 1: Renode Monitor lines
@@ -89,7 +87,18 @@ public final class TerminalLogStore: ObservableObject {
     }
     
     public func appendRenodeConsole(text: String) {
-        pendingRenodeBuffer += text
+        // Strip out repetitive SaveFrame framebuffer commands from monitor log to avoid flooding buffer
+        let cleaned: String
+        if text.contains("SaveFrame") {
+            let lines = text.components(separatedBy: .newlines)
+            let filtered = lines.filter { !$0.contains("SaveFrame") && !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            if filtered.isEmpty { return }
+            cleaned = filtered.joined(separator: "\n") + "\n"
+        } else {
+            cleaned = text
+        }
+        
+        pendingRenodeBuffer += cleaned
         if pendingRenodeBuffer.count > 64_000 {
             pendingRenodeBuffer = String(pendingRenodeBuffer.suffix(32_000))
         }

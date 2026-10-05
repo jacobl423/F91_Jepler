@@ -174,26 +174,32 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
     }
     
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = context.coordinator.textView else { return }
+        guard let textView = context.coordinator.textView,
+              let textStorage = textView.textStorage else { return }
         
         let displayText = text.isEmpty ? placeholder : text
         if context.coordinator.lastRenderedText != displayText {
             context.coordinator.lastRenderedText = displayText
             
+            let attributed: NSAttributedString
             if text.isEmpty {
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
                     .foregroundColor: NSColor.gray
                 ]
-                textView.textStorage?.setAttributedString(NSAttributedString(string: placeholder, attributes: attrs))
+                attributed = NSAttributedString(string: placeholder, attributes: attrs)
             } else {
-                let attributed = AnsiParser.parseToNSAttributedString(text: displayText)
-                textView.textStorage?.setAttributedString(attributed)
+                attributed = AnsiParser.parseToNSAttributedString(text: displayText)
             }
             
+            textStorage.beginEditing()
+            textStorage.setAttributedString(attributed)
+            textStorage.endEditing()
+            
             if autoScroll && !text.isEmpty {
-                DispatchQueue.main.async {
-                    textView.scrollToEndOfDocument(nil)
+                let endLength = textStorage.length
+                if endLength > 0 {
+                    textView.scrollRangeToVisible(NSRange(location: endLength, length: 0))
                 }
             }
         }
