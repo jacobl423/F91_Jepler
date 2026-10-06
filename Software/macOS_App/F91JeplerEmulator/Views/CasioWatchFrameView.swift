@@ -18,7 +18,7 @@ public struct CasioWatchFrameView: View {
             GeometryReader { geo in
                 let baseWidth: CGFloat = 660
                 let baseHeight: CGFloat = 380
-                let scale = max(0.4, min(geo.size.width / baseWidth, geo.size.height / baseHeight, 1.25))
+                let scale = max(0, min(geo.size.width / baseWidth, geo.size.height / baseHeight, 1.25))
                 
                 ZStack {
                     // Watch Face: PNG of the App Icon with Rounded Corners
@@ -181,7 +181,7 @@ public struct CasioWatchFrameView: View {
                 .scaleEffect(scale)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
-            .frame(minHeight: 280)
+            .frame(minHeight: 0)
         }
         .padding(4)
     }
@@ -302,15 +302,7 @@ struct SideButtonControlCard: View {
         }
         .padding(8)
         .frame(width: 120)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(NSColor.windowBackgroundColor).opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isPressed ? Color.green.opacity(0.8) : Color(white: 0.25), lineWidth: isPressed ? 1.5 : 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 5, x: 0, y: 2)
-        )
+        .workbenchGlass(cornerRadius: 12, tint: isPressed ? .green.opacity(0.2) : nil)
     }
 }
 
@@ -340,10 +332,10 @@ struct CasioLiveOLEDView: View {
                     .padding(5)
             } else {
                 VStack(spacing: 2) {
-                    Text("96×39 OLED")
-                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                    Text("96×39 WHITE OLED")
+                        .font(.system(size: 9.5, weight: .black, design: .monospaced))
                         .foregroundColor(displayStore.oledTheme.litColor.opacity(0.85))
-                    Text(isRunning ? "WAITING FOR ZEPHYR" : "OFFLINE")
+                    Text(isRunning ? "ER-OLED0.83-1 READY" : "OFFLINE")
                         .font(.system(size: 7.5, weight: .bold, design: .monospaced))
                         .foregroundColor(.secondary)
                 }

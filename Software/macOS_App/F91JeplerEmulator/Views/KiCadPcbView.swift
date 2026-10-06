@@ -13,8 +13,8 @@ public struct KiCadPcbView: View {
         VStack(spacing: 0) {
             // Header Bar & Main Tab Switcher
             VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
+                WrappingToolbar {
+                    WrappingToolbar(spacing: 6) {
                         Image(systemName: "cpu")
                             .foregroundColor(.accentColor)
                         Text("KICAD PCB WORKBENCH")
@@ -39,8 +39,6 @@ public struct KiCadPcbView: View {
                         .background(Color.black.opacity(0.2))
                         .cornerRadius(4)
                     }
-                    
-                    Spacer()
                     
                     // Quick Action: Open in KiCad
                     Menu {
@@ -110,10 +108,10 @@ public struct KiCadPcbView: View {
                     Text("Schematic & BOM").tag(4)
                     Text("Revision Diff").tag(5)
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
             }
             .padding(8)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.ultraThinMaterial)
             
             // GPIO Pin Audit Alert Banner (If KiCad nets changed vs emulator GPIOs)
             if let audit = session.pinAuditResult, audit.hasMismatches {
@@ -165,7 +163,7 @@ public struct KiCadPcbView: View {
                 switch session.pcbInspectorTab {
                 case 0:
                     // Tab 0: 2D & 3D Canvas
-                    HSplitView {
+                    AdaptiveSplitView {
                         PCBCanvasView(session: session) { selectedFootprint in
                             session.selectedFootprintID = selectedFootprint.reference
                         }
@@ -173,10 +171,12 @@ public struct KiCadPcbView: View {
                         
                         if showSideInspectorInCanvas {
                             PCBComponentInspectorPanel(session: session)
-                                .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
+                                .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 180)
                         }
                     }
-                    .overlay(alignment: .topTrailing) {
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        HStack {
+                        Spacer()
                         Button(action: { showSideInspectorInCanvas.toggle() }) {
                             Label(
                                 showSideInspectorInCanvas ? "Hide Inspector" : "Show Inspector",
@@ -186,6 +186,8 @@ public struct KiCadPcbView: View {
                         }
                         .buttonStyle(.bordered)
                         .padding(8)
+                        }
+                        .background(.ultraThinMaterial)
                     }
                     
                 case 1:

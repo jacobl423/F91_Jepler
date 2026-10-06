@@ -11,7 +11,7 @@ public struct GDBInspectorView: View {
     public var body: some View {
         VStack(spacing: 8) {
             // GDB Header Controls Bar
-            HStack {
+            WrappingToolbar {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("CORTEX-M4 MCU REGISTER & GDB DEBUGGER")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -45,7 +45,7 @@ public struct GDBInspectorView: View {
             
             Divider()
             
-            HSplitView {
+            AdaptiveSplitView {
                 // Left Sub-Panel: General Purpose Registers R0-R12, SP, LR, PC, xPSR
                 VStack(alignment: .leading, spacing: 4) {
                     Text("GENERAL PURPOSE REGISTERS")
@@ -72,11 +72,11 @@ public struct GDBInspectorView: View {
                     }
                     .listStyle(.inset)
                 }
-                .frame(minWidth: 220, maxWidth: 300)
+                .frame(minWidth: 220, idealWidth: 260, maxWidth: .infinity, minHeight: 140)
                 
                 // Right Sub-Panel: Memory & Hex Viewer
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
+                    WrappingToolbar {
                         Text("MEMORY DUMP / HEX VIEWER")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -99,8 +99,10 @@ public struct GDBInspectorView: View {
                     }
                     .padding(.horizontal, 8)
                     
-                    List {
-                        Section(header: Text("ADDRESS        HEX BYTES                         ASCII").font(.system(size: 9, design: .monospaced))) {
+                    ScrollViewReader { proxy in
+                    ScrollView([.horizontal, .vertical]) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Section(header: Text("ADDRESS        HEX BYTES                         ASCII").font(.system(size: 9, design: .monospaced)).id("memoryStart")) {
                             ForEach(sampleMemoryRows, id: \.address) { row in
                                 HStack(spacing: 12) {
                                     Text(String(format: "0x%08X", row.address))
@@ -110,6 +112,7 @@ public struct GDBInspectorView: View {
                                     Text(row.hex)
                                         .font(.system(size: 10, design: .monospaced))
                                         .foregroundColor(Color(red: 0.7, green: 0.9, blue: 0.7))
+                                        .fixedSize()
                                     
                                     Spacer()
                                     
@@ -120,7 +123,12 @@ public struct GDBInspectorView: View {
                             }
                         }
                     }
-                    .listStyle(.inset)
+                        .lineLimit(1)
+                        .frame(width: 560, alignment: .leading)
+                        .padding(8)
+                    }
+                    .onAppear { proxy.scrollTo("memoryStart", anchor: .topLeading) }
+                    }
                 }
             }
         }

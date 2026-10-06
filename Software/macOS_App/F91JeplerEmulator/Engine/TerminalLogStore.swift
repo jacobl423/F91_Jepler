@@ -6,6 +6,7 @@ public struct TerminalLogLine: Identifiable, Equatable {
     public let id: Int
     public let raw: String
     public let category: LogCategory
+    public let attributed: NSAttributedString
     
     public init(id: Int, raw: String) {
         self.id = id
@@ -20,6 +21,11 @@ public struct TerminalLogLine: Identifiable, Equatable {
             }
         }
         self.category = detected
+        self.attributed = AnsiParser.parseToNSAttributedString(text: raw)
+    }
+    
+    public static func == (lhs: TerminalLogLine, rhs: TerminalLogLine) -> Bool {
+        lhs.id == rhs.id && lhs.raw == rhs.raw
     }
 }
 
@@ -27,8 +33,6 @@ public struct TerminalLogLine: Identifiable, Equatable {
 public final class TerminalLogStore: ObservableObject {
     public static let shared = TerminalLogStore()
     
-    // Line capacity limit for constant memory footprint
-    private let maxLineCapacity: Int = 600
     private var nextLineId: Int = 0
     
     // Tab 0: UART lines, Tab 1: Renode Monitor lines
@@ -49,6 +53,7 @@ public final class TerminalLogStore: ObservableObject {
     // Published filtered view for UI rendering with stable IDs
     @Published public private(set) var filteredLines: [TerminalLogLine] = []
     @Published public private(set) var filteredText: String = ""
+    @Published public private(set) var logRevision: Int = 0
     
     // Raw string caches for backwards compatibility, copy, export
     public var rawUartString: String {
@@ -81,9 +86,6 @@ public final class TerminalLogStore: ObservableObject {
     
     public func appendUart(text: String) {
         pendingUartBuffer += text
-        if pendingUartBuffer.count > 64_000 {
-            pendingUartBuffer = String(pendingUartBuffer.suffix(32_000))
-        }
     }
     
     public func appendRenodeConsole(text: String) {
@@ -91,17 +93,24 @@ public final class TerminalLogStore: ObservableObject {
         let cleaned: String
         if text.contains("SaveFrame") {
             let lines = text.components(separatedBy: .newlines)
-            let filtered = lines.filter { !$0.contains("SaveFrame") && !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            let filtered = lines.filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.contains("SaveFrame") { return false }
+                if trimmed == "(machine-0)" || trimmed == "(monitor)" { return false }
+                return !trimmed.isEmpty
+            }
             if filtered.isEmpty { return }
             cleaned = filtered.joined(separator: "\n") + "\n"
         } else {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if (trimmed == "(machine-0)" || trimmed == "(monitor)") && renodeLines.count > 5 {
+                // Ignore stray bare prompts that arrive with no preceding command output
+                return
+            }
             cleaned = text
         }
         
         pendingRenodeBuffer += cleaned
-        if pendingRenodeBuffer.count > 64_000 {
-            pendingRenodeBuffer = String(pendingRenodeBuffer.suffix(32_000))
-        }
     }
     
     public func clear(tab: Int) {
@@ -152,14 +161,14 @@ public final class TerminalLogStore: ObservableObject {
     private func processIncomingChunk(_ chunk: String, into lineArray: inout [TerminalLogLine]) {
         let rawSplits = chunk.components(separatedBy: .newlines)
         for rawLine in rawSplits where !rawLine.isEmpty {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            if trimmed.contains("SaveFrame") { continue }
+            
             nextLineId += 1
-            let safeLine = rawLine.count > 1000 ? (String(rawLine.prefix(1000)) + " ... [truncated]") : rawLine
+            let safeLine = rawLine.count > 8192 ? (String(rawLine.prefix(8192)) + " ... [truncated]") : rawLine
             let entry = TerminalLogLine(id: nextLineId, raw: safeLine)
             lineArray.append(entry)
-        }
-        
-        if lineArray.count > maxLineCapacity {
-            lineArray.removeFirst(lineArray.count - maxLineCapacity)
         }
     }
     
@@ -182,6 +191,7 @@ public final class TerminalLogStore: ObservableObject {
         
         self.filteredLines = matching
         self.filteredText = matching.map(\.raw).joined(separator: "\n")
+        self.logRevision &+= 1
     }
     
     // MARK: - Background UART File Polling

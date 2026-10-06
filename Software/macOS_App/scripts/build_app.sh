@@ -34,5 +34,9 @@ if [ -f "$ROOT_DIR/F91JeplerEmulator/Resources/AppIcon.icns" ]; then
     cp "$ROOT_DIR/F91JeplerEmulator/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
 
-echo "Successfully built standalone macOS App Bundle with Custom App Icon!"
+# Ad-hoc code sign app bundle for macOS Apple Silicon Gatekeeper
+echo "Signing application bundle with ad-hoc signature..."
+codesign --force --deep --sign - "$APP_BUNDLE"
+
+echo "Successfully built and signed standalone macOS App Bundle!"
 echo "Location: $APP_BUNDLE"

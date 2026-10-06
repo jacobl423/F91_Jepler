@@ -1,0 +1,18 @@
+--- a/Software/macOS_App/F91JeplerEmulator/Engine/RenodeScriptGenerator.swift
++++ b/Software/macOS_App/F91JeplerEmulator/Engine/RenodeScriptGenerator.swift
+@@ -26,9 +26,12 @@
+                 }
+                 
+-                // Intel HEX: starts with ASCII ':' (0x3A)
+-                if headerData.first == 0x3A {
+-                    return .hex
+-                }
++                // Intel HEX: starts with ASCII ':' (0x3A) and followed by hexadecimal characters
++                if headerData.count >= 11 && headerData[0] == 0x3A {
++                    let hexChars = Set("0123456789ABCDEFabcdef".utf8)
++                    if headerData[1..<min(headerData.count, 11)].allSatisfy({ hexChars.contains($0) }) {
++                        return .hex
++                    }
++                }
+             }
+         }

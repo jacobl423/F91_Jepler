@@ -50,7 +50,7 @@ public struct PCBDiffView: View {
                 }
                 .padding(.horizontal)
                 
-                HSplitView {
+                AdaptiveSplitView {
                     // Left Panel: 2D Visual Diff Overlay Canvas
                     GeometryReader { geo in
                         let board = session.pcbBoard

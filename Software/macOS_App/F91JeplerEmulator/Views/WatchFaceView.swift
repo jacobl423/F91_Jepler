@@ -57,7 +57,7 @@ public struct WatchFaceView: View {
                             Image(decorative: cgImg, scale: 1.0)
                                 .resizable()
                                 .interpolation(.none)
-                                .aspectRatio(96/40, contentMode: .fit)
+                                .aspectRatio(96.0 / 39.0, contentMode: .fit)
                                 .padding(4)
                         } else {
                             VStack(spacing: 2) {

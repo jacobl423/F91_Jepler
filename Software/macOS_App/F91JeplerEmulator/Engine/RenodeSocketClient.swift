@@ -7,6 +7,7 @@ public final class RenodeSocketClient {
     
     public var onConnected: (() -> Void)?
     public var onError: ((String) -> Void)?
+    public var onOutputReceived: ((String) -> Void)?
     public private(set) var isConnected: Bool = false
     
     private var retryTimer: Timer?
@@ -74,7 +75,7 @@ public final class RenodeSocketClient {
             return
         }
         
-        let formatted = command.trimmingCharacters(in: .whitespacesAndNewlines) + "\r"
+        let formatted = command.trimmingCharacters(in: .whitespacesAndNewlines) + "\r\n"
         guard let data = formatted.data(using: .utf8) else { return }
         
         connection.send(content: data, completion: .contentProcessed({ error in
@@ -88,12 +89,64 @@ public final class RenodeSocketClient {
     
     private func receiveNext() {
         connection?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+            
+            if let data = data, !data.isEmpty {
+                let cleaned = self.cleanTelnetData(data)
+                if !cleaned.isEmpty {
+                    DispatchQueue.main.async {
+                        self.onOutputReceived?(cleaned)
+                    }
+                }
+            }
+            
             if isComplete || error != nil {
-                self?.isConnected = false
+                self.isConnected = false
                 return
             }
-            self?.receiveNext()
+            self.receiveNext()
         }
+    }
+    
+    /// Strips RFC 854 Telnet command sequences (IAC 0xFF ...) and cleanly decodes UTF-8 text
+    private func cleanTelnetData(_ data: Data) -> String {
+        var cleanBytes = [UInt8]()
+        cleanBytes.reserveCapacity(data.count)
+        
+        var i = 0
+        let bytes = [UInt8](data)
+        let count = bytes.count
+        
+        while i < count {
+            let b = bytes[i]
+            if b == 0xFF { // IAC
+                if i + 1 < count {
+                    let cmd = bytes[i + 1]
+                    switch cmd {
+                    case 0xFB, 0xFC, 0xFD, 0xFE: // WILL, WONT, DO, DONT (3 bytes)
+                        i += 3
+                    case 0xFA: // SB (subnegotiation) - skip until SE (0xFF 0xF0)
+                        i += 2
+                        while i + 1 < count && !(bytes[i] == 0xFF && bytes[i + 1] == 0xF0) {
+                            i += 1
+                        }
+                        i += 2
+                    case 0xFF: // Escaped 0xFF literal
+                        cleanBytes.append(0xFF)
+                        i += 2
+                    default:
+                        i += 2
+                    }
+                } else {
+                    i += 1
+                }
+            } else {
+                cleanBytes.append(b)
+                i += 1
+            }
+        }
+        
+        return String(decoding: cleanBytes, as: UTF8.self)
     }
     
     public func disconnect() {

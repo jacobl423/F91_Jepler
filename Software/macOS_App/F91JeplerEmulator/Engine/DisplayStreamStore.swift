@@ -8,7 +8,7 @@ public final class DisplayStreamStore: ObservableObject {
     
     @Published public var oledImage: CGImage? = nil
     @Published public var displayMetrics = DisplayMetrics()
-    @Published public var oledTheme: OLEDTheme = .cyan
+    @Published public var oledTheme: OLEDTheme = .white
     @Published public var showPixelGridMesh: Bool = true
     
     private var lastFrameTimes: [Double] = []

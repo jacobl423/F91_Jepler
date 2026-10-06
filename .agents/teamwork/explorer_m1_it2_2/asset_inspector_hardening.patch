@@ -1,0 +1,172 @@
+--- Software/macOS_App/F91JeplerEmulator/Engine/AssetInspector.swift	2026-10-05 15:21:08
++++ /tmp/HardenedAssetInspector.swift	2026-10-05 15:42:03
+@@ -208,26 +208,37 @@
+     private static func parseMCUbootHeader(data: Data) -> HeaderParseResult? {
+         guard data.count >= 28 else { return nil }
+ 
+-        // Read 32-bit LE Magic from offset 0
+-        let magic = data.withUnsafeBytes { $0.load(as: UInt32.self) }
+-        guard magic == 0x96F3B83D else { return nil }
++        return data.withUnsafeBytes { rawBuffer -> HeaderParseResult? in
++            guard rawBuffer.count >= 28 else { return nil }
+ 
+-        // Extract MCUboot struct fields
+-        let imgSize = data.withUnsafeBytes { $0.load(fromByteOffset: 12, as: UInt32.self) }
+-        let verMajor = data[20]
+-        let verMinor = data[21]
+-        let verRevision = data.withUnsafeBytes { $0.load(fromByteOffset: 22, as: UInt16.self) }
+-        let verBuildNum = data.withUnsafeBytes { $0.load(fromByteOffset: 24, as: UInt32.self) }
++            // Read 32-bit LE Magic from offset 0 using unaligned load
++            let rawMagic = rawBuffer.loadUnaligned(fromByteOffset: 0, as: UInt32.self)
++            let magic = UInt32(littleEndian: rawMagic)
++            guard magic == 0x96F3B83D else { return nil }
+ 
+-        let versionStr = "v\(verMajor).\(verMinor).\(verRevision)+\(verBuildNum)"
+-        let imgSizeFormatted = ByteCountFormatter.string(fromByteCount: Int64(imgSize), countStyle: .file)
+-        let detail = "\(versionStr) · \(imgSizeFormatted) payload"
++            // Extract MCUboot struct fields with unaligned little-endian loads
++            let rawImgSize = rawBuffer.loadUnaligned(fromByteOffset: 12, as: UInt32.self)
++            let imgSize = UInt32(littleEndian: rawImgSize)
+ 
+-        return HeaderParseResult(
+-            badge: "MCUboot Signed",
+-            detail: detail,
+-            format: .mcubootBinary
+-        )
++            let verMajor = rawBuffer[20]
++            let verMinor = rawBuffer[21]
++
++            let rawRevision = rawBuffer.loadUnaligned(fromByteOffset: 22, as: UInt16.self)
++            let verRevision = UInt16(littleEndian: rawRevision)
++
++            let rawBuildNum = rawBuffer.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
++            let verBuildNum = UInt32(littleEndian: rawBuildNum)
++
++            let versionStr = "v\(verMajor).\(verMinor).\(verRevision)+\(verBuildNum)"
++            let imgSizeFormatted = ByteCountFormatter.string(fromByteCount: Int64(imgSize), countStyle: .file)
++            let detail = "\(versionStr) · \(imgSizeFormatted) payload"
++
++            return HeaderParseResult(
++                badge: "MCUboot Signed",
++                detail: detail,
++                format: .mcubootBinary
++            )
++        }
+     }
+ 
+     // MARK: - 2. ELF32 ARM Cortex-M Header (\x7FELF)
+@@ -235,33 +246,42 @@
+     private static func parseELFHeader(data: Data) -> HeaderParseResult? {
+         guard data.count >= 52 else { return nil }
+ 
+-        // Magic \x7fELF
+-        guard data[0] == 0x7F && data[1] == 0x45 && data[2] == 0x4C && data[3] == 0x46 else { return nil }
++        return data.withUnsafeBytes { rawBuffer -> HeaderParseResult? in
++            guard rawBuffer.count >= 52 else { return nil }
+ 
+-        let elfClass = data[4] // 1 = 32-bit, 2 = 64-bit
+-        let elfEndian = data[5] // 1 = LSB (little endian), 2 = MSB (big endian)
+-        guard elfClass == 1, elfEndian == 1 else {
++            // Magic \x7fELF at offset 0
++            guard rawBuffer[0] == 0x7F && rawBuffer[1] == 0x45 && rawBuffer[2] == 0x4C && rawBuffer[3] == 0x46 else {
++                return nil
++            }
++
++            let elfClass = rawBuffer[4]  // 1 = 32-bit, 2 = 64-bit
++            let elfEndian = rawBuffer[5] // 1 = LSB (little endian), 2 = MSB (big endian)
++            guard elfClass == 1, elfEndian == 1 else {
++                return HeaderParseResult(
++                    badge: elfClass == 2 ? "ELF64" : "ELF32",
++                    detail: "Non-ARM Cortex-M ELF",
++                    format: .elfArmCortexM
++                )
++            }
++
++            let rawMachine = rawBuffer.loadUnaligned(fromByteOffset: 18, as: UInt16.self)
++            let eMachine = UInt16(littleEndian: rawMachine)
++
++            let rawEntry = rawBuffer.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
++            let eEntry = UInt32(littleEndian: rawEntry)
++
++            let isARM = (eMachine == 0x0028) // EM_ARM = 40 (0x28)
++            let badge = isARM ? "ELF32 ARM" : "ELF32"
++            let entryHex = String(format: "%04X", eEntry)
++            let archDesc = isARM ? "Cortex-M" : "Arch 0x\(String(format: "%02X", eMachine))"
++            let detail = "\(archDesc) · Entry 0x\(entryHex)"
++
+             return HeaderParseResult(
+-                badge: elfClass == 2 ? "ELF64" : "ELF32",
+-                detail: "Non-ARM Cortex-M ELF",
++                badge: badge,
++                detail: detail,
+                 format: .elfArmCortexM
+             )
+         }
+-
+-        let eMachine = data.withUnsafeBytes { $0.load(fromByteOffset: 18, as: UInt16.self) }
+-        let eEntry = data.withUnsafeBytes { $0.load(fromByteOffset: 24, as: UInt32.self) }
+-
+-        let isARM = (eMachine == 0x0028) // EM_ARM = 40 (0x28)
+-        let badge = isARM ? "ELF32 ARM" : "ELF32"
+-        let entryHex = String(format: "%04X", eEntry)
+-        let archDesc = isARM ? "Cortex-M" : "Arch 0x\(String(format: "%02X", eMachine))"
+-        let detail = "\(archDesc) · Entry 0x\(entryHex)"
+-
+-        return HeaderParseResult(
+-            badge: badge,
+-            detail: detail,
+-            format: .elfArmCortexM
+-        )
+     }
+ 
+     // MARK: - 3. KiCad PCB S-Expression ((kicad_pcb ...))
+@@ -290,7 +310,9 @@
+         if let tRange = text.range(of: #"\(\s*thickness\s+([0-9.]+)\)"#, options: .regularExpression) {
+             let match = String(text[tRange])
+             let parts = match.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted).filter { !$0.isEmpty }
+-            thickness = parts.first
++            if let thickStr = parts.first, Double(thickStr) != nil {
++                thickness = thickStr
++            }
+         }
+ 
+         var details: [String] = []
+@@ -331,8 +353,8 @@
+             let linePayload = line.dropFirst()
+             guard linePayload.unicodeScalars.allSatisfy({ hexChars.contains($0) }) else { continue }
+ 
+-            let typeIndex = line.index(line.startIndex, offsetBy: 7)
+-            let typeEnd = line.index(typeIndex, offsetBy: 2)
++            guard let typeIndex = line.index(line.startIndex, offsetBy: 7, limitedBy: line.endIndex),
++                  let typeEnd = line.index(typeIndex, offsetBy: 2, limitedBy: line.endIndex) else { continue }
+             let typeStr = String(line[typeIndex..<typeEnd])
+             guard let recordType = UInt8(typeStr, radix: 16), recordType <= 0x05 else { continue }
+ 
+@@ -340,17 +362,17 @@
+             hasValidHex = true
+ 
+             if recordType == 0x04 { // Extended Linear Address
+-                let dataStart = line.index(line.startIndex, offsetBy: 9)
+-                let dataEnd = line.index(dataStart, offsetBy: 4)
+-                if dataEnd <= line.endIndex, let highWord = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
+-                    baseAddress = highWord << 16
+-                }
++                guard line.count >= 13,
++                      let dataStart = line.index(line.startIndex, offsetBy: 9, limitedBy: line.endIndex),
++                      let dataEnd = line.index(dataStart, offsetBy: 4, limitedBy: line.endIndex),
++                      let highWord = UInt32(String(line[dataStart..<dataEnd]), radix: 16) else { continue }
++                baseAddress = highWord << 16
+             } else if recordType == 0x05 { // Start Linear Address (Entry Point)
+-                let dataStart = line.index(line.startIndex, offsetBy: 9)
+-                let dataEnd = line.index(dataStart, offsetBy: 8)
+-                if dataEnd <= line.endIndex, let entry = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
+-                    entryPoint = entry
+-                }
++                guard line.count >= 17,
++                      let dataStart = line.index(line.startIndex, offsetBy: 9, limitedBy: line.endIndex),
++                      let dataEnd = line.index(dataStart, offsetBy: 8, limitedBy: line.endIndex),
++                      let entry = UInt32(String(line[dataStart..<dataEnd]), radix: 16) else { continue }
++                entryPoint = entry
+             }
+         }
+ 

@@ -50,12 +50,9 @@ public final class PCBFileWatcher {
             }
         }
         
-        src.setCancelHandler { [weak self] in
-            guard let self = self else { return }
-            if self.fileDescriptor >= 0 {
-                close(self.fileDescriptor)
-                self.fileDescriptor = -1
-            }
+        let fd = fileDescriptor
+        src.setCancelHandler {
+            close(fd)
         }
         
         src.resume()
@@ -68,10 +65,10 @@ public final class PCBFileWatcher {
         debounceTimer?.invalidate()
         debounceTimer = nil
         if let src = source {
-            src.cancel()
             source = nil
-        }
-        if fileDescriptor >= 0 {
+            fileDescriptor = -1
+            src.cancel()
+        } else if fileDescriptor >= 0 {
             close(fileDescriptor)
             fileDescriptor = -1
         }

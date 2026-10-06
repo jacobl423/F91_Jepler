@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">F91_Jepler</string>
+    <string name="title_activity_main">F91_Jepler</string>
+    <string name="package_name">com.f91jepler.companion</string>
+    <string name="custom_url_scheme">com.f91jepler.companion</string>
+</resources>
