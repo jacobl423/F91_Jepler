@@ -4,9 +4,9 @@ public struct GATTTestInjectorView: View {
     @ObservedObject var session: EmulatorSession
     
     @State private var notifCategory: NotificationCategory = .sms
-    @State private var notifTitle: String = "Alice Smith"
+    @State private var notifTitle: String = "Jake Fay"
     @State private var notifSubtitle: String = "Message"
-    @State private var notifBody: String = "Meeting at 3:00 PM!"
+    @State private var notifBody: String = "u up? ;)"
     
     @State private var is24HourClock: Bool = false
     @State private var batteryVoltage: Double = 3.9
@@ -46,9 +46,9 @@ public struct GATTTestInjectorView: View {
                         }
                         
                         GridRow {
-                            Text("Title / Caller:")
+                            Text("From:")
                                 .font(.system(size: 11, weight: .medium))
-                            TextField("e.g. Alice Smith", text: $notifTitle)
+                            TextField("e.g. Jake Fay", text: $notifTitle)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 11))
                         }
@@ -62,7 +62,7 @@ public struct GATTTestInjectorView: View {
                         }
                         
                         GridRow {
-                            Text("Message Body:")
+                            Text("Text:")
                                 .font(.system(size: 11, weight: .medium))
                             TextField("Notification message text (max 20 bytes streamed)", text: $notifBody)
                                 .textFieldStyle(.roundedBorder)
@@ -95,8 +95,7 @@ public struct GATTTestInjectorView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(10)
+                .workbenchGlass(cornerRadius: 18)
                 
                 // Section 2: Clock Sync Service Injector
                 VStack(alignment: .leading, spacing: 12) {
@@ -159,8 +158,7 @@ public struct GATTTestInjectorView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(10)
+                .workbenchGlass(cornerRadius: 18)
                 
                 // Section 3: Virtual Battery & Telemetry Sliders
                 VStack(alignment: .leading, spacing: 12) {
@@ -260,8 +258,7 @@ public struct GATTTestInjectorView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(10)
+                .workbenchGlass(cornerRadius: 18)
                 
                 // Section 4: GATT Transmission History Log
                 VStack(alignment: .leading, spacing: 8) {
@@ -307,8 +304,7 @@ public struct GATTTestInjectorView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(10)
+                .workbenchGlass(cornerRadius: 18)
             }
             .padding(16)
         }

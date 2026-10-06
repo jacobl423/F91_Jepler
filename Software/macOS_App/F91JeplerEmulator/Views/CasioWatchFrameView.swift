@@ -302,15 +302,7 @@ struct SideButtonControlCard: View {
         }
         .padding(8)
         .frame(width: 120)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(NSColor.windowBackgroundColor).opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isPressed ? Color.green.opacity(0.8) : Color(white: 0.25), lineWidth: isPressed ? 1.5 : 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 5, x: 0, y: 2)
-        )
+        .workbenchGlass(cornerRadius: 12, tint: isPressed ? .green.opacity(0.2) : nil)
     }
 }
 

@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftUI
 import CoreGraphics
+import AppKit
 
 public enum ViewMode: String, CaseIterable, Identifiable {
     case watch = "Watch Console"
@@ -33,13 +34,97 @@ public final class EmulatorSession: ObservableObject {
     @Published public var statusMessage: String = "Ready"
     @Published public var errorMessage: String? = nil
     
-    @Published public var selectedViewMode: ViewMode = .split
+    // MARK: - Project Sidebar & Layout State
+    @Published public var isSidebarVisible: Bool = true {
+        didSet {
+            userDefaults.set(isSidebarVisible, forKey: SessionPersistenceKeys.isSidebarVisible)
+        }
+    }
+    
+    @Published public var sidebarWidth: CGFloat = 280 {
+        didSet {
+            userDefaults.set(Double(sidebarWidth), forKey: SessionPersistenceKeys.sidebarWidth)
+        }
+    }
+    
+    @Published public var selectedViewMode: ViewMode = .split {
+        didSet {
+            userDefaults.set(selectedViewMode.rawValue, forKey: SessionPersistenceKeys.selectedViewMode)
+        }
+    }
+    
     @Published public var watchPanelHeight: CGFloat = 340
     @Published public var terminalPanelHeight: CGFloat = 280
     @Published public var pressedKeys: Set<String> = [] // "1" (Light), "2" (Mode), "3" (Toggle)
     @Published public var pcbBoard: KiCadBoard = KiCadBoard()
     @Published public var comparisonPCBURL: URL? = nil
     @Published public var pcbDiffResult: PCBBoardDiffResult? = nil
+    
+    // MARK: - Asset Management
+    @Published public var assets: [SessionAssetKind: SessionAsset] = [:]
+    
+    // Configuration & File Overrides (Stored settings)
+    @Published public var customRenodePath: String? = nil
+    @Published public var customWorkspaceURL: URL? = nil
+    
+    // Backwards-Compatible Asset Computed Properties
+    public var customPCBURL: URL? {
+        get {
+            guard let asset = assets[.pcb], asset.isCustom else { return nil }
+            return asset.fileURL
+        }
+        set {
+            if let newURL = newValue {
+                updateAsset(kind: .pcb, url: newURL)
+            } else {
+                revertAssetToDefault(kind: .pcb)
+            }
+        }
+    }
+    
+    public var customAppBinURL: URL? {
+        get {
+            guard let asset = assets[.appFirmware], asset.isCustom else { return nil }
+            return asset.fileURL
+        }
+        set {
+            if let newURL = newValue {
+                updateAsset(kind: .appFirmware, url: newURL)
+            } else {
+                revertAssetToDefault(kind: .appFirmware)
+            }
+        }
+    }
+    
+    public var customBootloaderURL: URL? {
+        get {
+            guard let asset = assets[.bootloader], asset.isCustom else { return nil }
+            return asset.fileURL
+        }
+        set {
+            if let newURL = newValue {
+                updateAsset(kind: .bootloader, url: newURL)
+            } else {
+                revertAssetToDefault(kind: .bootloader)
+            }
+        }
+    }
+    
+    public var customRescURL: URL? {
+        get {
+            guard let asset = assets[.rescScript], asset.isCustom else { return nil }
+            return asset.fileURL
+        }
+        set {
+            if let newURL = newValue {
+                updateAsset(kind: .rescScript, url: newURL)
+            } else {
+                revertAssetToDefault(kind: .rescScript)
+            }
+        }
+    }
+    
+    private let userDefaults: UserDefaults
     
     public let logStore = TerminalLogStore.shared
     public let displayStore = DisplayStreamStore.shared
@@ -117,14 +202,6 @@ public final class EmulatorSession: ObservableObject {
     @Published public var pcbValidationResult: PCBValidationResult? = nil
     @Published public var comparisonBoard: KiCadBoard? = nil
     
-    // Configuration & File Overrides
-    @Published public var customRenodePath: String? = nil
-    @Published public var customWorkspaceURL: URL? = nil
-    @Published public var customRescURL: URL? = nil
-    @Published public var customPCBURL: URL? = nil
-    @Published public var customAppBinURL: URL? = nil
-    @Published public var customBootloaderURL: URL? = nil
-    
     @Published public var showSetupSheet: Bool = false
     @Published public var isTargetedForDrop: Bool = false
     @Published public var cpuInspector = CPUInspectorModel()
@@ -149,9 +226,257 @@ public final class EmulatorSession: ObservableObject {
     private let uartSocketClient = RenodeUartSocketClient()
     private var framePpmURL: URL?
     
-    public init() {
-        loadEmbeddedDefaults()
+    // MARK: - Initialization & State Persistence
+    
+    public init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        
+        // 1. Restore Sidebar Visibility
+        if userDefaults.object(forKey: SessionPersistenceKeys.isSidebarVisible) != nil {
+            self.isSidebarVisible = userDefaults.bool(forKey: SessionPersistenceKeys.isSidebarVisible)
+        } else {
+            self.isSidebarVisible = true
+        }
+        
+        // 2. Restore Sidebar Width
+        let savedWidth = CGFloat(userDefaults.double(forKey: SessionPersistenceKeys.sidebarWidth))
+        if savedWidth >= 230 && savedWidth <= 380 {
+            self.sidebarWidth = savedWidth
+        } else {
+            self.sidebarWidth = 280
+        }
+        
+        // 3. Restore Selected View Mode
+        if let savedModeRaw = userDefaults.string(forKey: SessionPersistenceKeys.selectedViewMode) {
+            if let mode = ViewMode(rawValue: savedModeRaw) {
+                self.selectedViewMode = mode
+            } else if let mode = ViewMode.allCases.first(where: { "\($0)".lowercased() == savedModeRaw.lowercased() }) {
+                self.selectedViewMode = mode
+            }
+        }
+        
+        // 4. Restore and Validate Assets
+        loadInitialAssets()
     }
+    
+    private func loadInitialAssets() {
+        for kind in SessionAssetKind.allCases {
+            if let savedPath = userDefaults.string(forKey: kind.userDefaultsKey) {
+                if FileManager.default.fileExists(atPath: savedPath) {
+                    let customURL = URL(fileURLWithPath: savedPath)
+                    let asset = SessionAsset(
+                        kind: kind,
+                        url: customURL,
+                        state: .customLoaded,
+                        metadata: nil,
+                        isCustom: true
+                    )
+                    self.assets[kind] = asset
+                    inspectStartupAssetAsync(kind: kind, url: customURL)
+                } else {
+                    // Stale path on disk: clean up and fall back to embedded default
+                    userDefaults.removeObject(forKey: kind.userDefaultsKey)
+                    loadDefaultAsset(kind: kind)
+                }
+            } else {
+                loadDefaultAsset(kind: kind)
+            }
+        }
+        
+        // Initialize PCB board and watcher if available
+        if let pcbAsset = assets[.pcb], let pcbURL = pcbAsset.fileURL {
+            self.activePCBURL = pcbURL
+            Task { [weak self] in
+                if let board = try? await KiCadParser.parseAsync(fileURL: pcbURL) {
+                    await MainActor.run {
+                        self?.pcbBoard = board
+                        self?.validateActiveBoard()
+                    }
+                }
+                await MainActor.run {
+                    self?.startWatchingActivePCB()
+                }
+            }
+        }
+    }
+    
+    private func loadDefaultAsset(kind: SessionAssetKind) {
+        let (resourceName, resourceExt) = kind.defaultResourceName
+        let defaultURL = ResourceLoader.url(forResource: resourceName, withExtension: resourceExt)
+        let state: AssetLoadState = defaultURL != nil ? .defaultEmbedded : .missing("Default resource not found")
+        let asset = SessionAsset(
+            kind: kind,
+            url: defaultURL,
+            state: state,
+            metadata: nil,
+            isCustom: false
+        )
+        self.assets[kind] = asset
+        if let url = defaultURL {
+            inspectAssetAsync(kind: kind, url: url, isCustom: false)
+        }
+    }
+    
+    private func inspectStartupAssetAsync(kind: SessionAssetKind, url: URL) {
+        Task { [weak self] in
+            // Safe inspection: if file is corrupted, returns nil without throwing
+            if let metadata = await AssetInspector.inspectSafe(url: url, kind: kind, isCustom: true) {
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    if var existing = self.assets[kind] {
+                        existing.metadata = metadata
+                        existing.state = .loaded(metadata)
+                        self.assets[kind] = existing
+                    }
+                }
+            } else {
+                // Startup inspection failed: remove corrupted key from UserDefaults and revert to default asset
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.userDefaults.removeObject(forKey: kind.userDefaultsKey)
+                    self.loadDefaultAsset(kind: kind)
+                    if kind == .pcb {
+                        if let defaultURL = self.assets[.pcb]?.fileURL {
+                            self.activePCBURL = defaultURL
+                            self.reloadPCB(fileURL: defaultURL)
+                            self.startWatchingActivePCB()
+                        }
+                    }
+                    self.errorMessage = "Failed to load custom \(kind.title); restored default"
+                }
+            }
+        }
+    }
+    
+    private func inspectAssetAsync(kind: SessionAssetKind, url: URL, isCustom: Bool) {
+        Task { [weak self] in
+            do {
+                let metadata = try await AssetInspector.inspect(url: url, kind: kind, isCustom: isCustom)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    if var existing = self.assets[kind] {
+                        existing.metadata = metadata
+                        existing.state = .loaded(metadata)
+                        self.assets[kind] = existing
+                    }
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    if isCustom {
+                        self.userDefaults.removeObject(forKey: kind.userDefaultsKey)
+                    }
+                    if var existing = self.assets[kind] {
+                        existing.state = .failed(error: error.localizedDescription)
+                        self.assets[kind] = existing
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Asset Quick Actions
+    
+    public func updateAsset(kind: SessionAssetKind, url: URL) {
+        userDefaults.set(url.path, forKey: kind.userDefaultsKey)
+        
+        let asset = SessionAsset(
+            kind: kind,
+            url: url,
+            state: .customLoaded,
+            metadata: nil,
+            isCustom: true
+        )
+        self.assets[kind] = asset
+        inspectAssetAsync(kind: kind, url: url, isCustom: true)
+        
+        switch kind {
+        case .pcb:
+            self.activePCBURL = url
+            self.reloadPCB(fileURL: url)
+            self.startWatchingActivePCB()
+            self.pcbReloadToast = "Loaded custom PCB: \(url.lastPathComponent)"
+        case .appFirmware, .bootloader, .rescScript:
+            if isRunning {
+                self.pcbReloadToast = "Updated \(kind.title); restarting emulation..."
+                stopSession()
+                startSession()
+            } else {
+                self.statusMessage = "Loaded \(url.lastPathComponent)"
+            }
+        }
+    }
+    
+    public func revertAssetToDefault(kind: SessionAssetKind) {
+        userDefaults.removeObject(forKey: kind.userDefaultsKey)
+        loadDefaultAsset(kind: kind)
+        
+        guard let defaultURL = assets[kind]?.fileURL else { return }
+        
+        switch kind {
+        case .pcb:
+            self.activePCBURL = defaultURL
+            self.reloadPCB(fileURL: defaultURL)
+            self.startWatchingActivePCB()
+            self.pcbReloadToast = "Reverted PCB to default"
+        case .appFirmware, .bootloader, .rescScript:
+            if isRunning {
+                self.pcbReloadToast = "Reverted \(kind.title); restarting emulation..."
+                stopSession()
+                startSession()
+            } else {
+                self.statusMessage = "Reverted \(kind.title) to default"
+            }
+        }
+    }
+    
+    public func reloadAsset(kind: SessionAssetKind) {
+        guard let asset = assets[kind], let url = asset.fileURL else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            self.errorMessage = "Asset file missing on disk: \(url.lastPathComponent)"
+            var modified = asset
+            modified.state = .missing("File missing on disk")
+            self.assets[kind] = modified
+            return
+        }
+        
+        inspectAssetAsync(kind: kind, url: url, isCustom: asset.isCustom)
+        
+        switch kind {
+        case .pcb:
+            self.reloadPCB(fileURL: url)
+            self.pcbReloadToast = "Reloaded \(url.lastPathComponent)"
+        case .appFirmware, .bootloader, .rescScript:
+            if isRunning {
+                self.pcbReloadToast = "Reloaded \(url.lastPathComponent); restarting emulation..."
+                stopSession()
+                startSession()
+            } else {
+                self.pcbReloadToast = "Reloaded metadata for \(url.lastPathComponent)"
+            }
+        }
+    }
+    
+    public func revealAssetInFinder(kind: SessionAssetKind) {
+        guard let asset = assets[kind], let url = asset.fileURL else { return }
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            self.errorMessage = "Cannot reveal in Finder: file does not exist at \(url.path)"
+        }
+    }
+    
+    public func revealActivePCBinFinder() {
+        revealAssetInFinder(kind: .pcb)
+    }
+    
+    public func loadEmbeddedDefaults() {
+        for kind in SessionAssetKind.allCases {
+            revertAssetToDefault(kind: kind)
+        }
+    }
+    
+    // MARK: - KiCad Board Management & Live Watcher
     
     public func validateActiveBoard() {
         self.pcbValidationResult = PCBValidator.validate(board: self.pcbBoard)
@@ -183,24 +508,6 @@ public final class EmulatorSession: ObservableObject {
             self.comparisonBoard = draft
             self.pcbDiffResult = PCBDiffEngine.compare(base: self.pcbBoard, draft: draft)
             self.pcbInspectorTab = 4 // Diff tab
-        }
-    }
-    
-    public func loadEmbeddedDefaults() {
-        let pcbCandidate = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
-        if let embeddedPCB = pcbCandidate {
-            self.activePCBURL = embeddedPCB
-            Task { [weak self] in
-                if let board = try? await KiCadParser.parseAsync(fileURL: embeddedPCB) {
-                    await MainActor.run {
-                        self?.pcbBoard = board
-                        self?.validateActiveBoard()
-                    }
-                }
-                await MainActor.run {
-                    self?.startWatchingActivePCB()
-                }
-            }
         }
     }
     
@@ -254,11 +561,6 @@ public final class EmulatorSession: ObservableObject {
             targetURL = FileManager.default.fileExists(atPath: proURL.path) ? proURL : pcbURL
         }
         KiCadToolService.shared.openFileInKiCad(fileURL: targetURL, appType: appType)
-    }
-    
-    public func revealActivePCBinFinder() {
-        guard let pcbURL = activePCBURL else { return }
-        KiCadToolService.shared.revealInFinder(fileURL: pcbURL)
     }
     
     public func trigger3DRender() {
@@ -357,15 +659,16 @@ public final class EmulatorSession: ObservableObject {
             return
         }
         
-        guard let appBinURL = customAppBinURL ?? ResourceLoader.url(forResource: "app.signed", withExtension: "bin") else {
+        guard let appBinURL = assets[.appFirmware]?.fileURL ?? customAppBinURL ?? ResourceLoader.url(forResource: "app.signed", withExtension: "bin") else {
             self.errorMessage = "Missing firmware app.signed.bin"
             self.statusMessage = "Missing Firmware"
             return
         }
         
-        let bootloaderURL = customBootloaderURL ?? ResourceLoader.url(forResource: "mcuboot", withExtension: "elf")
+        let bootloaderURL = assets[.bootloader]?.fileURL ?? customBootloaderURL ?? ResourceLoader.url(forResource: "mcuboot", withExtension: "elf")
         let ssd1306CsURL = ResourceLoader.url(forResource: "F91SSD1306", withExtension: "cs")
-        let pcbURL = customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
+        let pcbURL = assets[.pcb]?.fileURL ?? customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
+        let rescURL = (assets[.rescScript]?.isCustom == true ? assets[.rescScript]?.fileURL : nil) ?? customRescURL
         
         if let pcb = pcbURL {
             self.activePCBURL = pcb
@@ -382,7 +685,7 @@ public final class EmulatorSession: ObservableObject {
                 bootloaderURL: bootloaderURL,
                 ssd1306CsURL: ssd1306CsURL,
                 renodePath: renodePath,
-                customRescURL: customRescURL
+                customRescURL: rescURL
             )
             
             processManager.onOutputReceived = { [weak self] str in

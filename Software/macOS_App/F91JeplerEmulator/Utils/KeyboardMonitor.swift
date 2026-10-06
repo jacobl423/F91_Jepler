@@ -43,6 +43,12 @@ public final class KeyboardMonitor {
                 return event
             }
             
+            // Ignore keystrokes when Command, Control, or Option modifiers are active
+            let activeModifiers = event.modifierFlags.intersection([.command, .control, .option])
+            if !activeModifiers.isEmpty {
+                return event
+            }
+            
             if let key = self?.keyFrom(event: event) {
                 if !event.isARepeat {
                     self?.onKeyDown?(key)
@@ -55,6 +61,11 @@ public final class KeyboardMonitor {
         keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
             if let responder = NSApp.keyWindow?.firstResponder,
                (responder is NSTextView || responder is NSTextField || responder is NSText) {
+                return event
+            }
+            
+            let activeModifiers = event.modifierFlags.intersection([.command, .control, .option])
+            if !activeModifiers.isEmpty {
                 return event
             }
             
@@ -91,6 +102,9 @@ public final class KeyboardMonitor {
     }
     
     private func keyFrom(event: NSEvent) -> String? {
+        let activeModifiers = event.modifierFlags.intersection([.command, .control, .option])
+        guard activeModifiers.isEmpty else { return nil }
+        
         // macOS Key codes:
         // 18 = '1', 83 = Numpad 1
         // 19 = '2', 84 = Numpad 2

@@ -407,7 +407,7 @@ public struct PCBCanvasView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.ultraThinMaterial)
         }
         .frame(height: 40)
     }

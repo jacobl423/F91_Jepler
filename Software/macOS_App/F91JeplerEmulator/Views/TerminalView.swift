@@ -113,7 +113,7 @@ public struct TerminalView: View {
                 }
             }
             .padding(8)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.ultraThinMaterial)
             
             Divider()
             
@@ -141,8 +141,7 @@ public struct TerminalView: View {
                                     .font(.system(size: 9.5, design: .monospaced))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Color(NSColor.controlBackgroundColor))
-                                    .cornerRadius(4)
+                                    .workbenchGlass(cornerRadius: 8, interactive: true)
                             }
                             .buttonStyle(.plain)
                         }
@@ -181,7 +180,7 @@ public struct TerminalView: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
                 }
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.ultraThinMaterial)
             }
         }
     }

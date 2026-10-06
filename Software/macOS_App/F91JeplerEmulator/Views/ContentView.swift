@@ -10,59 +10,44 @@ public struct ContentView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Resizable Top Bar with ALL Tabs Visible
+            // MARK: 1. Top Header Bar with Simulation Controls & Tab Selector
             AppTopBarView(session: session)
             
             Divider()
             
-            // Main Content Body based on selected ViewMode
+            // MARK: 2. 3-Pane Horizontal Split View
             HSplitView {
-                // Left Panel: Dynamic Workbench View
-                VStack(spacing: 0) {
-                    switch session.selectedViewMode {
-                    case .watch:
-                        CasioWatchFrameView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .canvas:
-                        OLEDCanvasView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .gatt:
-                        GATTTestInjectorView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .test:
-                        AutomatedTestRunnerView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .pcb:
-                        KiCadPcbView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .gdb:
-                        GDBInspectorView(session: session)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .split:
-                        ResizableVSplitView(
-                            topHeight: $session.watchPanelHeight,
-                            minTopHeight: 200,
-                            maxTopHeight: 600
-                        ) {
-                            CasioWatchFrameView(session: session)
-                        } bottom: {
-                            GATTTestInjectorView(session: session)
-                        }
-                    }
+                // Leading Pane: Collapsible Project & Asset Upload Sidebar
+                if session.isSidebarVisible {
+                    ProjectSidebarView(session: session)
+                        .frame(minWidth: 230, idealWidth: session.sidebarWidth, maxWidth: 380)
+                        .layoutPriority(0)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                 }
-                .frame(minWidth: 300, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
                 
-                // Right Panel: Monospaced UART Terminal with ANSI Colors, Filtering, and Inspection
+                // Center Pane: Fluid Dynamic Emulation Workbench
+                VStack(spacing: 0) {
+                    workbenchPanel
+                }
+                .frame(minWidth: 320, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
+                
+                // Trailing Pane: Monospaced UART Terminal & Renode Monitor
                 VStack(spacing: 0) {
                     TerminalView(session: session)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(minWidth: 260, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 260, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(0)
             }
+            .animation(.easeInOut(duration: 0.2), value: session.isSidebarVisible)
             
-            // Error / Warning Banner
+            // MARK: 3. Error / Warning Banner
             if let err = session.errorMessage {
-                HStack {
+                HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.yellow)
                     Text(err)
@@ -76,64 +61,113 @@ public struct ContentView: View {
                 .background(Color.red.opacity(0.18))
             }
         }
-        .overlay(
-            Group {
-                if session.isTargetedForDrop {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.accentColor, lineWidth: 4)
-                        .background(Color.accentColor.opacity(0.1))
-                        .overlay(
-                            VStack(spacing: 8) {
-                                Image(systemName: "square.and.arrow.down")
-                                    .font(.system(size: 36))
-                                    .foregroundColor(.accentColor)
-                                Text("Drop KiCad PCB or Firmware file to test")
-                                    .font(.system(size: 16, weight: .bold))
-                            }
-                        )
-                }
-            }
-        )
-        .onDrop(of: [.fileURL], isTargeted: $session.isTargetedForDrop) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                guard let url = url else { return }
-                Task { @MainActor in
-                    let ext = url.pathExtension.lowercased()
-                    if ext == "kicad_pcb" {
-                        session.customPCBURL = url
-                        session.startSession()
-                    } else if ext == "bin" || ext == "hex" {
-                        session.customAppBinURL = url
-                        session.startSession()
-                    } else if ext == "elf" {
-                        session.customBootloaderURL = url
-                        session.startSession()
-                    } else if ext == "resc" {
-                        session.customRescURL = url
-                        session.startSession()
-                    }
-                }
-            }
-            return true
-        }
+        .background(WorkbenchBackdrop())
+        // MARK: 4. Window Toolbar Controls
         .toolbar {
+            // Dedicated Sidebar Toggle Button in Leading Navigation Placement
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        session.isSidebarVisible.toggle()
+                    }
+                }) {
+                    Label("Toggle Project Sidebar", systemImage: "sidebar.leading")
+                }
+                .keyboardShortcut("0", modifiers: .command)
+                .help("Toggle Project Sidebar (⌘0)")
+            }
+            
+            // Workbench Configuration Sheet Button
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { session.showSetupSheet = true }) {
                     Label("Configure Workbench", systemImage: "gearshape")
                 }
+                .help("Configure Workbench")
             }
         }
+        // MARK: 5. Keyboard Shortcuts (Secondary ⌥⌘S and Tab ⌘1..⌘7)
+        .background(
+            Group {
+                // Secondary Sidebar Toggle Shortcut: ⌥⌘S
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        session.isSidebarVisible.toggle()
+                    }
+                }) {
+                    EmptyView()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                
+                // Workbench Tab Switching Shortcuts: ⌘1 .. ⌘7
+                Button(action: { session.selectedViewMode = .watch }) { EmptyView() }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button(action: { session.selectedViewMode = .canvas }) { EmptyView() }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button(action: { session.selectedViewMode = .gatt }) { EmptyView() }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button(action: { session.selectedViewMode = .test }) { EmptyView() }
+                    .keyboardShortcut("4", modifiers: .command)
+                Button(action: { session.selectedViewMode = .pcb }) { EmptyView() }
+                    .keyboardShortcut("5", modifiers: .command)
+                Button(action: { session.selectedViewMode = .gdb }) { EmptyView() }
+                    .keyboardShortcut("6", modifiers: .command)
+                Button(action: { session.selectedViewMode = .split }) { EmptyView() }
+                    .keyboardShortcut("7", modifiers: .command)
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+        )
+        // MARK: 6. Hardware Setup Sheet
         .sheet(isPresented: $session.showSetupSheet) {
             HardwareSetupView(session: session)
         }
+        // MARK: 7. Dual Persistence Key Sync & Lifecycle
+        .onChange(of: session.isSidebarVisible) { visible in
+            UserDefaults.standard.set(visible, forKey: SessionPersistenceKeys.sidebarVisibleAlternate)
+        }
         .onAppear {
+            UserDefaults.standard.set(session.isSidebarVisible, forKey: SessionPersistenceKeys.sidebarVisibleAlternate)
             setupKeyboardMonitoring()
             session.startSession()
         }
         .onDisappear {
             keyboardMonitor.stop()
             session.stopSession()
+        }
+    }
+    
+    // MARK: - Workbench Panel View Mode Router
+    @ViewBuilder
+    private var workbenchPanel: some View {
+        switch session.selectedViewMode {
+        case .watch:
+            CasioWatchFrameView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .canvas:
+            OLEDCanvasView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .gatt:
+            GATTTestInjectorView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .test:
+            AutomatedTestRunnerView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .pcb:
+            KiCadPcbView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .gdb:
+            GDBInspectorView(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .split:
+            ResizableVSplitView(
+                topHeight: $session.watchPanelHeight,
+                minTopHeight: 200,
+                maxTopHeight: 600
+            ) {
+                CasioWatchFrameView(session: session)
+            } bottom: {
+                GATTTestInjectorView(session: session)
+            }
         }
     }
     
@@ -256,6 +290,28 @@ public struct AppTopBarView: View {
             HStack(spacing: 10) {
                 // MARK: Leading Section: Sidebar Toggle & App Branding
                 HStack(spacing: 8) {
+                    // Dedicated Sidebar Toggle Icon Button with Visual Active State
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            session.isSidebarVisible.toggle()
+                        }
+                    }) {
+                        Image(systemName: "sidebar.leading")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(session.isSidebarVisible ? .accentColor : .secondary)
+                            .frame(width: 24, height: 24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(session.isSidebarVisible ? Color.accentColor.opacity(0.15) : Color(NSColor.controlBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(session.isSidebarVisible ? Color.accentColor.opacity(0.35) : Color.gray.opacity(0.2), lineWidth: 0.75)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Toggle Project Sidebar (⌘0)")
+                
                     Text("Jepler Dev")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
@@ -313,8 +369,7 @@ public struct AppTopBarView: View {
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(6)
+                    .workbenchGlass(cornerRadius: 10)
                 
                     Button(action: { session.showSetupSheet = true }) {
                         Image(systemName: "gearshape")
@@ -329,7 +384,7 @@ public struct AppTopBarView: View {
             // MARK: Resizable Horizontal Tab Bar (Workbench Modes)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    ForEach(ViewMode.allCases) { mode in
+                    ForEach(Array(ViewMode.allCases.enumerated()), id: \.element.id) { index, mode in
                         Button(action: { session.selectedViewMode = mode }) {
                             HStack(spacing: 5) {
                                 Image(systemName: mode.iconName)
@@ -339,19 +394,13 @@ public struct AppTopBarView: View {
                             }
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5)
-                            .background(
-                                session.selectedViewMode == mode ?
-                                    Color.accentColor :
-                                    Color(NSColor.controlBackgroundColor)
-                            )
-                            .foregroundColor(
-                                session.selectedViewMode == mode ?
-                                    .white :
-                                    .primary
-                            )
-                            .cornerRadius(6)
+                            .foregroundStyle(session.selectedViewMode == mode ? Color.accentColor : Color.primary)
+                            .workbenchGlass(cornerRadius: 12,
+                                            tint: session.selectedViewMode == mode ? .accentColor.opacity(0.2) : nil,
+                                            interactive: true)
                         }
                         .buttonStyle(.plain)
+                        .help("Switch to \(mode.rawValue) (⌘\(index + 1))")
                     }
                 }
                 .padding(.vertical, 2)
@@ -361,6 +410,6 @@ public struct AppTopBarView: View {
             .padding(.horizontal, 10)
         }
         .padding(.vertical, 6)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 }

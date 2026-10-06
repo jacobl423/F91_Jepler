@@ -55,7 +55,9 @@ public final class RenodeProcessManager {
         bootloaderURL: URL?,
         ssd1306CsURL: URL?,
         renodePath: String,
-        customRescURL: URL? = nil
+        customRescURL: URL? = nil,
+        appFormat: RenodeScriptGenerator.BinaryFormat? = nil,
+        bootloaderFormat: RenodeScriptGenerator.BinaryFormat? = nil
     ) throws -> (port: UInt16, uartPort: UInt16) {
         stop()
         Self.cleanupStaleRenodeProcesses()
@@ -64,13 +66,27 @@ public final class RenodeProcessManager {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         self.workDir = tempDir
         
-        let localAppBin = tempDir.appendingPathComponent("app.signed.bin")
+        // Stage application binary while preserving file extension and name
+        let appExt = appBinURL.pathExtension.isEmpty ? "bin" : appBinURL.pathExtension
+        let appBase = appBinURL.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "$", with: "_")
+            .replacingOccurrences(of: "@", with: "_")
+        let safeAppName = (appBase.isEmpty ? "app" : appBase) + ".\(appExt)"
+        let localAppBin = tempDir.appendingPathComponent(safeAppName)
         try? FileManager.default.removeItem(at: localAppBin)
         try? FileManager.default.copyItem(at: appBinURL, to: localAppBin)
         
+        // Stage bootloader binary while preserving file extension and name
         var localBootloader: URL? = nil
         if let bl = bootloaderURL {
-            let dest = tempDir.appendingPathComponent("mcuboot.elf")
+            let blExt = bl.pathExtension.isEmpty ? "elf" : bl.pathExtension
+            let blBase = bl.deletingPathExtension().lastPathComponent
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "$", with: "_")
+                .replacingOccurrences(of: "@", with: "_")
+            let safeBlName = (blBase.isEmpty ? "mcuboot" : blBase) + ".\(blExt)"
+            let dest = tempDir.appendingPathComponent(safeBlName)
             try? FileManager.default.removeItem(at: dest)
             if (try? FileManager.default.copyItem(at: bl, to: dest)) != nil || FileManager.default.fileExists(atPath: dest.path) {
                 localBootloader = dest
@@ -112,7 +128,9 @@ public final class RenodeProcessManager {
                 bootloaderPath: localBootloader?.path,
                 uartPort: uartPort,
                 uartLogPath: uartLogFile.path,
-                ssd1306CsPath: localSSD1306?.path
+                ssd1306CsPath: localSSD1306?.path,
+                appFormat: appFormat,
+                bootloaderFormat: bootloaderFormat
             )
             try rescContent.write(to: rescFile, atomically: true, encoding: .utf8)
         }

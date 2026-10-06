@@ -111,7 +111,7 @@ public struct KiCadPcbView: View {
                 .pickerStyle(.menu)
             }
             .padding(8)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.ultraThinMaterial)
             
             // GPIO Pin Audit Alert Banner (If KiCad nets changed vs emulator GPIOs)
             if let audit = session.pinAuditResult, audit.hasMismatches {
@@ -187,7 +187,7 @@ public struct KiCadPcbView: View {
                         .buttonStyle(.bordered)
                         .padding(8)
                         }
-                        .background(Color(NSColor.windowBackgroundColor))
+                        .background(.ultraThinMaterial)
                     }
                     
                 case 1:

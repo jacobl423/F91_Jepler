@@ -73,3 +73,7 @@ Software/macOS_App/build/
 feature_ideas.md
 feature_ideas/
 *feature_ideas*
+
+# Cross-platform Mobile Companion App
+Software/companion_app/node_modules/
+Software/companion_app/dist/
