@@ -1,0 +1,40 @@
+--- a/Software/macOS_App/F91JeplerEmulator/Engine/AssetInspector.swift
++++ b/Software/macOS_App/F91JeplerEmulator/Engine/AssetInspector.swift
+@@ -334,23 +334,31 @@
+-            let typeIndex = line.index(line.startIndex, offsetBy: 7)
+-            let typeEnd = line.index(typeIndex, offsetBy: 2)
++            guard let typeIndex = line.index(line.startIndex, offsetBy: 7, limitedBy: line.endIndex),
++                  let typeEnd = line.index(typeIndex, offsetBy: 2, limitedBy: line.endIndex) else {
++                continue
++            }
+             let typeStr = String(line[typeIndex..<typeEnd])
+             guard let recordType = UInt8(typeStr, radix: 16), recordType <= 0x05 else { continue }
+ 
+             recordCount += 1
+             hasValidHex = true
+ 
+             if recordType == 0x04 { // Extended Linear Address
+-                let dataStart = line.index(line.startIndex, offsetBy: 9)
+-                let dataEnd = line.index(dataStart, offsetBy: 4)
+-                if dataEnd <= line.endIndex, let highWord = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
++                guard line.count >= 13,
++                      let dataStart = line.index(line.startIndex, offsetBy: 9, limitedBy: line.endIndex),
++                      let dataEnd = line.index(dataStart, offsetBy: 4, limitedBy: line.endIndex) else {
++                    continue
++                }
++                if let highWord = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
+                     baseAddress = highWord << 16
+                 }
+             } else if recordType == 0x05 { // Start Linear Address (Entry Point)
+-                let dataStart = line.index(line.startIndex, offsetBy: 9)
+-                let dataEnd = line.index(dataStart, offsetBy: 8)
+-                if dataEnd <= line.endIndex, let entry = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
++                guard line.count >= 17,
++                      let dataStart = line.index(line.startIndex, offsetBy: 9, limitedBy: line.endIndex),
++                      let dataEnd = line.index(dataStart, offsetBy: 8, limitedBy: line.endIndex) else {
++                    continue
++                }
++                if let entry = UInt32(String(line[dataStart..<dataEnd]), radix: 16) {
+                     entryPoint = entry
+                 }
+             }
