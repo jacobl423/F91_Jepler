@@ -21,7 +21,7 @@ public struct GATTTestInjectorView: View {
             VStack(alignment: .leading, spacing: 18) {
                 // Section 1: Notification GATT Service Injector
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
+                    WrappingToolbar {
                         Image(systemName: "bell.badge.fill")
                             .foregroundColor(.blue)
                         Text("Notification GATT Service Injector")
@@ -42,7 +42,7 @@ public struct GATTTestInjectorView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .frame(width: 200)
+                            .frame(maxWidth: 200)
                         }
                         
                         GridRow {
@@ -100,7 +100,7 @@ public struct GATTTestInjectorView: View {
                 
                 // Section 2: Clock Sync Service Injector
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
+                    WrappingToolbar {
                         Image(systemName: "clock.badge.checkmark.fill")
                             .foregroundColor(.orange)
                         Text("Clock Sync GATT Service Injector")
@@ -113,7 +113,7 @@ public struct GATTTestInjectorView: View {
                     
                     let clockPayload = ClockSyncPayload(is24Hour: is24HourClock)
                     
-                    HStack(spacing: 20) {
+                    WrappingToolbar(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Current Host Epoch:")
                                 .font(.system(size: 10, weight: .medium))
@@ -164,7 +164,7 @@ public struct GATTTestInjectorView: View {
                 
                 // Section 3: Virtual Battery & Telemetry Sliders
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
+                    WrappingToolbar {
                         Image(systemName: "battery.100.bolt")
                             .foregroundColor(.green)
                         Text("Virtual Battery & ADC Telemetry")
@@ -175,7 +175,7 @@ public struct GATTTestInjectorView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    HStack(spacing: 24) {
+                    WrappingToolbar(spacing: 12) {
                         // Battery Gauge
                         VStack(spacing: 4) {
                             ZStack {

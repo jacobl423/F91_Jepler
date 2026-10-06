@@ -18,7 +18,7 @@ public struct CasioWatchFrameView: View {
             GeometryReader { geo in
                 let baseWidth: CGFloat = 660
                 let baseHeight: CGFloat = 380
-                let scale = max(0.4, min(geo.size.width / baseWidth, geo.size.height / baseHeight, 1.25))
+                let scale = max(0, min(geo.size.width / baseWidth, geo.size.height / baseHeight, 1.25))
                 
                 ZStack {
                     // Watch Face: PNG of the App Icon with Rounded Corners
@@ -181,7 +181,7 @@ public struct CasioWatchFrameView: View {
                 .scaleEffect(scale)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
-            .frame(minHeight: 280)
+            .frame(minHeight: 0)
         }
         .padding(4)
     }

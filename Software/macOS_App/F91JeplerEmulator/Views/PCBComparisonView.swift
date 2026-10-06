@@ -41,7 +41,7 @@ public struct PCBComparisonView: View {
                     Divider()
                     
                     // Main Comparison Area: Canvases on Top/Left, Change Log on Right
-                    HSplitView {
+                    AdaptiveSplitView {
                         // Canvases Area
                         VStack(spacing: 0) {
                             if displayMode == .sideBySide {
@@ -50,11 +50,11 @@ public struct PCBComparisonView: View {
                                 unifiedOverlayCanvas(base: session.pcbBoard, draft: draft, diff: diff)
                             }
                         }
-                        .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 260, maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                         
                         // Right Panel: Change Log Table
                         changeLogPanel(diff: diff)
-                            .frame(minWidth: 260, idealWidth: 320, maxWidth: 450)
+                            .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 140)
                     }
                 }
             } else {
@@ -66,7 +66,7 @@ public struct PCBComparisonView: View {
     // MARK: - Header Bar
     
     private var headerBar: some View {
-        HStack {
+        WrappingToolbar {
             VStack(alignment: .leading, spacing: 2) {
                 Text("PCB REVISION COMPARISON")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -163,7 +163,7 @@ public struct PCBComparisonView: View {
     // MARK: - Side-by-Side Dual Synchronized Canvases
     
     private func sideBySideCanvases(base: KiCadBoard, draft: KiCadBoard, diff: PCBBoardDiffResult) -> some View {
-        HSplitView {
+        AdaptiveSplitView {
             // Left Canvas: Baseline PCB
             VStack(spacing: 0) {
                 HStack {
@@ -180,7 +180,7 @@ public struct PCBComparisonView: View {
                 
                 singleBoardCanvas(board: base, isDraft: false, diff: diff)
             }
-            .frame(minWidth: 200)
+            .frame(minWidth: 0)
             
             // Right Canvas: Draft PCB
             VStack(spacing: 0) {
@@ -198,7 +198,7 @@ public struct PCBComparisonView: View {
                 
                 singleBoardCanvas(board: draft, isDraft: true, diff: diff)
             }
-            .frame(minWidth: 200)
+            .frame(minWidth: 0)
         }
     }
     

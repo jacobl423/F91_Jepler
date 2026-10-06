@@ -158,6 +158,8 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
     @Binding var topHeight: CGFloat
     let minTopHeight: CGFloat
     let maxTopHeight: CGFloat
+    @GestureState private var dragState: SplitDragState?
+    @State private var isHoveringDivider = false
     let top: () -> Top
     let bottom: () -> Bottom
     
@@ -177,10 +179,14 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
     
     public var body: some View {
         GeometryReader { geo in
+            let displayedHeight = SplitPaneSizing.topHeight(
+                preferred: dragState.map { $0.startHeight + $0.translation } ?? topHeight,
+                available: geo.size.height, minimum: minTopHeight, maximum: maxTopHeight
+            )
             VStack(spacing: 0) {
                 // Top Panel
                 top()
-                    .frame(height: max(minTopHeight, min(topHeight, geo.size.height - 120)))
+                    .frame(height: displayedHeight)
                     .clipped()
                 
                 // Draggable Splitter Bar with macOS resize cursor
@@ -195,27 +201,45 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
                 }
                 .contentShape(Rectangle())
                 .onHover { inside in
-                    if inside {
-                        NSCursor.resizeUpDown.push()
-                    } else {
-                        NSCursor.pop()
+                    if inside != isHoveringDivider {
+                        isHoveringDivider = inside
+                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
                     }
                 }
                 .gesture(
-                    DragGesture(minimumDistance: 1)
-                        .onChanged { value in
-                            let newHeight = topHeight + value.translation.height
-                            topHeight = max(minTopHeight, min(newHeight, geo.size.height - 120))
+                    DragGesture(minimumDistance: 1, coordinateSpace: .named("workbenchSplit"))
+                        .updating($dragState) { value, state, _ in
+                            let start = state?.startHeight ?? SplitPaneSizing.topHeight(
+                                preferred: topHeight, available: geo.size.height,
+                                minimum: minTopHeight, maximum: maxTopHeight)
+                            state = SplitDragState(startHeight: start, translation: value.translation.height)
+                        }
+                        .onEnded { value in
+                            let start = dragState?.startHeight ?? SplitPaneSizing.topHeight(
+                                preferred: topHeight, available: geo.size.height,
+                                minimum: minTopHeight, maximum: maxTopHeight)
+                            topHeight = SplitPaneSizing.topHeight(
+                                preferred: start + value.translation.height,
+                                available: geo.size.height, minimum: minTopHeight, maximum: maxTopHeight)
                         }
                 )
                 .onTapGesture(count: 2) {
-                    topHeight = (minTopHeight + maxTopHeight) / 2
+                    topHeight = SplitPaneSizing.topHeight(
+                        preferred: (geo.size.height - 7) / 2, available: geo.size.height,
+                        minimum: minTopHeight, maximum: maxTopHeight)
+                }
+                
+                .help("Drag to resize; double-click to balance panes")
+                .accessibilityLabel("Workbench pane divider")
+                .onDisappear {
+                    if isHoveringDivider { NSCursor.pop(); isHoveringDivider = false }
                 }
                 
                 // Bottom Panel
                 bottom()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .coordinateSpace(name: "workbenchSplit")
         }
     }
 }
@@ -228,55 +252,81 @@ public struct AppTopBarView: View {
     }
     
     public var body: some View {
-        HStack(spacing: 10) {
-            // App Branding & Machine Status
-            HStack(spacing: 8) {
-                Text("Jepler Dev")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                // MARK: Leading Section: Sidebar Toggle & App Branding
+                HStack(spacing: 8) {
+                    Text("Jepler Dev")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
                 
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(session.isRunning ? Color.green : Color.red)
-                        .frame(width: 7, height: 7)
-                    Text(session.statusMessage)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.leading, 12)
-            
-            Divider().frame(height: 18)
-            
-            // Simulation Controls (Start / Stop / Reboot)
-            HStack(spacing: 6) {
-                Button(action: {
-                    if session.isRunning {
-                        session.stopSession()
-                    } else {
-                        session.startSession()
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(session.isRunning ? Color.green : Color.red)
+                            .frame(width: 7, height: 7)
+                        Text(session.statusMessage)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .frame(maxWidth: 220, alignment: .leading)
                     }
-                }) {
-                    Label(session.isRunning ? "Stop" : "Start", systemImage: session.isRunning ? "square.fill" : "play.fill")
-                        .font(.system(size: 11, weight: .semibold))
                 }
-                .buttonStyle(.bordered)
-                .tint(session.isRunning ? .red : .green)
-                .controlSize(.small)
+                .padding(.leading, 10)
+            
+                Divider().frame(height: 18)
+            
+                // MARK: Simulation Controls (Start / Stop / Reboot)
+                HStack(spacing: 6) {
+                    Button(action: {
+                        if session.isRunning {
+                            session.stopSession()
+                        } else {
+                            session.startSession()
+                        }
+                    }) {
+                        Label(session.isRunning ? "Stop" : "Start", systemImage: session.isRunning ? "square.fill" : "play.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(session.isRunning ? .red : .green)
+                    .controlSize(.small)
                 
-                Button(action: { session.rebootMachine() }) {
-                    Label("Reboot", systemImage: "arrow.counterclockwise")
-                        .font(.system(size: 11))
+                    Button(action: { session.rebootMachine() }) {
+                        Label("Reboot", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!session.isRunning)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!session.isRunning)
+            
+                Divider().frame(height: 18)
+            
+                Spacer(minLength: 0)
+
+                // Hotkeys & Settings
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        KeyLegendBadge(key: "1", label: "Light")
+                        KeyLegendBadge(key: "2", label: "Mode")
+                        KeyLegendBadge(key: "3", label: "Toggle")
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(6)
+                
+                    Button(action: { session.showSetupSheet = true }) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Configure Workbench")
+                }
+                .padding(.trailing, 12)
             }
-            
-            Divider().frame(height: 18)
-            
-            // Resizable Horizontal Tab Bar showing ALL Tabs in the app
+            // MARK: Resizable Horizontal Tab Bar (Workbench Modes)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(ViewMode.allCases) { mode in
@@ -308,29 +358,7 @@ public struct AppTopBarView: View {
             }
             .frame(maxWidth: .infinity)
             
-            Divider().frame(height: 18)
-            
-            // Hotkeys & Settings
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    KeyLegendBadge(key: "1", label: "Light")
-                    KeyLegendBadge(key: "2", label: "Mode")
-                    KeyLegendBadge(key: "3", label: "Toggle")
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(6)
-                
-                Button(action: { session.showSetupSheet = true }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Configure Workbench")
-            }
-            .padding(.trailing, 12)
+            .padding(.horizontal, 10)
         }
         .padding(.vertical, 6)
         .background(Color(NSColor.windowBackgroundColor))

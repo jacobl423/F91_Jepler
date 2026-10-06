@@ -29,7 +29,7 @@ public struct TerminalView: View {
         VStack(spacing: 0) {
             // Header: Source Picker, Category Chips, Search, Actions
             VStack(spacing: 6) {
-                HStack(spacing: 10) {
+                WrappingToolbar(spacing: 8) {
                     Picker(selection: $logStore.selectedTab, label: Text("")) {
                         Text("Zephyr UART").tag(0)
                         Text("Renode Monitor").tag(1)
@@ -56,8 +56,7 @@ public struct TerminalView: View {
                     .padding(.vertical, 4)
                     .background(Color(NSColor.controlBackgroundColor))
                     .cornerRadius(6)
-                    
-                    Spacer()
+                    .frame(width: 220)
                     
                     Toggle("Auto-scroll", isOn: $logStore.autoScroll)
                         .toggleStyle(.checkbox)
@@ -89,7 +88,7 @@ public struct TerminalView: View {
                 }
                 
                 // Category Filter Chips
-                HStack(spacing: 6) {
+                WrappingToolbar(spacing: 6) {
                     Text("Filter:")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary)
@@ -107,7 +106,6 @@ public struct TerminalView: View {
                         .buttonStyle(.plain)
                     }
                     
-                    Spacer()
                     
                     Text("\(logStore.filteredLines.count.formatted()) lines")
                         .font(.system(size: 9.5, design: .monospaced))
@@ -129,7 +127,7 @@ public struct TerminalView: View {
                     Divider()
                     
                     // Quick Action Chips
-                    HStack(spacing: 6) {
+                    WrappingToolbar(spacing: 6) {
                         Text("Quick Commands:")
                             .font(.system(size: 9.5, weight: .semibold))
                             .foregroundColor(.secondary)
@@ -148,8 +146,6 @@ public struct TerminalView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        
-                        Spacer()
                     }
                     .padding(.horizontal, 8)
                     .padding(.top, 2)

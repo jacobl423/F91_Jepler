@@ -13,6 +13,7 @@ public struct PCBCanvasView: View {
     @State private var geometryCache = PCBGeometryCache()
     
     // Zoom and Pan
+    @State private var canvasSize: CGSize = .zero
     @State private var zoomScale: CGFloat = 12.0
     @State private var panOffset: CGSize = .zero
     @State private var dragStartOffset: CGSize = .zero
@@ -280,7 +281,9 @@ public struct PCBCanvasView: View {
                         }
                     }
                 }
+                .onChange(of: geo.size) { canvasSize = $0 }
                 .onAppear {
+                    canvasSize = geo.size
                     fitToBoard(in: geo.size)
                     geometryCache.rebuild(board: session.pcbBoard)
                 }
@@ -298,6 +301,7 @@ public struct PCBCanvasView: View {
     // MARK: - Canvas Control Bar
     
     private var canvasControlBar: some View {
+        ScrollView(.horizontal) {
         HStack(spacing: 8) {
             // 2D Vector / 3D Raytrace Render Toggle
             Picker("View Mode", selection: $session.show3DRenderMode) {
@@ -328,7 +332,7 @@ public struct PCBCanvasView: View {
                 .buttonStyle(.borderless)
                 .help("Zoom In")
                 
-                Button(action: { fitToBoard(in: CGSize(width: 500, height: 400)) }) {
+                Button(action: { fitToBoard(in: canvasSize) }) {
                     Image(systemName: "arrow.up.left.and.down.right.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
@@ -404,6 +408,8 @@ public struct PCBCanvasView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(height: 40)
     }
     
     // MARK: - Drawing Helpers

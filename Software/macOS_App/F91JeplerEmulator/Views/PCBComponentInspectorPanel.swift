@@ -25,7 +25,7 @@ public struct PCBComponentInspectorPanel: View {
     }
     
     public var body: some View {
-        HSplitView {
+        AdaptiveSplitView {
             // Left List: Component Browser by Type & Search
             VStack(spacing: 0) {
                 // Search Field & Category Filter
@@ -113,7 +113,7 @@ public struct PCBComponentInspectorPanel: View {
                 }
                 .listStyle(.inset)
             }
-            .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+            .frame(minWidth: 220, idealWidth: 260, maxWidth: .infinity, minHeight: 140)
             
             // Right Details Inspector: Selected Component Deep-Dive
             if let selectedFp = session.pcbBoard.footprint(reference: session.selectedFootprintID) {

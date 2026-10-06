@@ -13,23 +13,22 @@ public struct OLEDCanvasView: View {
     public var body: some View {
         VStack(spacing: 8) {
             // Display Toolbar (Theme picker, Grid toggle, Statistics)
-            HStack(spacing: 12) {
+            WrappingToolbar {
                 Picker("OLED Color Theme", selection: $displayStore.oledTheme) {
                     ForEach(OLEDTheme.allCases) { theme in
                         Text(theme.rawValue).tag(theme)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 290)
+                .frame(maxWidth: 290)
                 
                 Toggle("Pixel Grid Mesh", isOn: $displayStore.showPixelGridMesh)
                     .toggleStyle(.checkbox)
                     .font(.system(size: 11))
                 
-                Spacer()
                 
                 // Real-time FPS & Draw Call Metrics
-                HStack(spacing: 12) {
+                WrappingToolbar(spacing: 12) {
                     HStack(spacing: 4) {
                         Text("FPS:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
