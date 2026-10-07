@@ -145,3 +145,15 @@ private struct DesktopGlassBackdrop: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
+
+/// Use the system's Liquid Glass button treatment in the native window toolbar.
+extension View {
+    @ViewBuilder
+    func nativeToolbarControl() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
+}

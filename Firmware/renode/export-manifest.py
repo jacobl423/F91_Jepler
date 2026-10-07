@@ -20,7 +20,9 @@ with (out / 'zephyr/edt.pickle').open('rb') as stream:
 buttons = json.loads((out / 'buttons.json').read_text())
 # nRF pinctrl psels encode function at bits 24..31, port at bit 5,
 # and pin at bits 0..4. Read only default state, never low-power states.
-i2c = edt.get_node('i2c0')
+i2c = edt.label2node.get('i2c0')
+if i2c is None:
+    raise SystemExit('Compiled devicetree has no i2c0 controller label')
 pins = {}
 if i2c:
     for state in i2c.pinctrls:
@@ -34,12 +36,13 @@ if i2c:
                         pins['i2cSCL' if function == 11 else 'i2cSDA'] = f'P{(psel >> 5) & 1}.{psel & 31:02d}'
 manifest = dict(
     schemaVersion=1, imageSHA256=digest(out / 'app.signed.bin'),
+    mcubootSHA256=digest(out / 'mcuboot.elf'),
     sourceRevision=git('rev-parse', 'HEAD'),
     sourceDirty=bool(git('status', '--porcelain', '--untracked-files=normal', '--', 'Firmware')),
     board='nrf52840dk/nrf52840', elfPath='zephyr/zephyr.elf',
     elfSHA256=digest(out / 'zephyr/zephyr.elf'),
-    configSHA256=digest(out / 'zephyr/.config'), buttons=buttons,
-    framebufferHeight=edt.get_node('ssd1306').props['height'].val,
+    configPath='zephyr/.config', configSHA256=digest(out / 'zephyr/.config'), buttons=buttons,
+    framebufferHeight=edt.label2node['ssd1306'].props['height'].val,
     visibleHeight=39, **pins)
 (out / 'firmware-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 print('Exported image-bound firmware-manifest.json')

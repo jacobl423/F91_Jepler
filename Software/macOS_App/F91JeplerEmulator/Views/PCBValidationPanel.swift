@@ -125,7 +125,7 @@ public struct PCBValidationPanel: View {
                 VStack(spacing: 0) {
                     Text("\(result.scorePercentage)%")
                         .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    Text("VALID")
+                    Text("ADVISORY")
                         .font(.system(size: 7, weight: .bold))
                         .foregroundColor(.secondary)
                 }
@@ -134,11 +134,11 @@ public struct PCBValidationPanel: View {
             // Status and Board Dimensions
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text("PCB VALIDATION ENGINE")
+                    Text("PCB HEURISTIC ANALYSIS · NOT DRC")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     
                     if result.isReadyForFabrication {
-                        Text("HEURISTIC CHECKS PASS")
+                        Text("ADVISORY HEURISTICS")
                             .font(.system(size: 8, weight: .bold))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -146,7 +146,7 @@ public struct PCBValidationPanel: View {
                             .foregroundColor(.green)
                             .cornerRadius(3)
                     } else {
-                        Text("DRAFT / IN-PROGRESS")
+                        Text("ADVISORY HEURISTICS")
                             .font(.system(size: 8, weight: .bold))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -156,7 +156,7 @@ public struct PCBValidationPanel: View {
                     }
                 }
                 
-                Text("Board: \(session.pcbBoard.filename) (\(String(format: "%.1f", session.pcbBoard.widthMm)) × \(String(format: "%.1f", session.pcbBoard.heightMm)) mm)")
+                Text("Board: \(session.pcbBoard.filename) (\(String(format: "%.1f", session.pcbBoard.widthMm)) × \(String(format: "%.1f", session.pcbBoard.heightMm)) mm) · SHA-256 \(result.sourceSHA256 ?? "unverified") · Advisory only")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
             }
@@ -205,6 +205,8 @@ public struct PCBValidationPanel: View {
         struct ExportWrapper: Codable {
             let filename: String
             let generatedAt: Date
+            let sourceSHA256: String
+            let confidence: String
             let overallScore: Double
             let isReadyForFabrication: Bool
             let checks: [ValidationCheck]
@@ -214,6 +216,8 @@ public struct PCBValidationPanel: View {
         let wrapper = ExportWrapper(
             filename: session.pcbBoard.filename,
             generatedAt: result.generatedAt,
+            sourceSHA256: result.sourceSHA256 ?? "unverified",
+            confidence: "advisory only; not KiCad DRC, electrical simulation, or fabrication approval",
             overallScore: result.overallScore,
             isReadyForFabrication: result.isReadyForFabrication,
             checks: result.checks,
@@ -252,8 +256,8 @@ public struct PCBValidationPanel: View {
     private func exportMarkdown() {
         guard let result = session.pcbValidationResult else { return }
         var md = "# PCB Validation Report: \(session.pcbBoard.filename)\n\n"
-        md += "- **Overall Design Score:** \(result.scorePercentage)%\n"
-        md += "- **Heuristic Status:** \(result.isReadyForFabrication ? "Heuristic checks pass; fabrication review required" : "Draft / Unrouted ⚠️")\n"
+        md += "- **Heuristic score (advisory only):** \(result.scorePercentage)%\n- **Source SHA-256:** \(result.sourceSHA256 ?? "unverified")\n"
+        md += "- **Confidence:** advisory only; not KiCad DRC, electrical simulation, or fabrication approval\n"
         md += "- **Board Envelope:** \(String(format: "%.2f", session.pcbBoard.widthMm)) × \(String(format: "%.2f", session.pcbBoard.heightMm)) mm\n"
         md += "- **Date:** \(Date().formatted())\n"
         md += "- **Passed:** \(result.passCount) | **Warnings:** \(result.warningCount) | **Critical:** \(result.errorCount)\n\n"

@@ -281,14 +281,22 @@ public struct PCBCanvasView: View {
                         }
                     }
                 }
-                .onChange(of: geo.size) { canvasSize = $0 }
+                .onChange(of: geo.size) { newSize in
+                    canvasSize = newSize
+                    fitToBoard(in: newSize)
+                }
                 .onAppear {
                     canvasSize = geo.size
                     fitToBoard(in: geo.size)
                     geometryCache.rebuild(board: session.pcbBoard)
                 }
+                .onChange(of: session.pcbBoard.filename) { _ in
+                    geometryCache.rebuild(board: session.pcbBoard)
+                    fitToBoard(in: canvasSize)
+                }
                 .onChange(of: session.pcbBoard.footprints.count) { _ in
                     geometryCache.rebuild(board: session.pcbBoard)
+                    fitToBoard(in: canvasSize)
                 }
                 .onChange(of: session.pcbBoard.tracks.count) { _ in
                     geometryCache.rebuild(board: session.pcbBoard)
@@ -533,14 +541,19 @@ public struct PCBCanvasView: View {
         
         ctx.stroke(Path(bodyRect), with: .color(Color.white.opacity(0.45)), lineWidth: 1)
         
-        // Reference Label
-        let labelColor = isSelected ? Color.yellow : (isCritical ? Color.cyan : Color.white.opacity(0.85))
-        ctx.draw(
-            Text(fp.reference)
-                .font(.system(size: max(7, min(11, 0.7 * zoomScale)), weight: .bold, design: .monospaced))
-                .foregroundColor(labelColor),
-            at: CGPoint(x: pos.x, y: pos.y - boxSize/2 - 6)
+        // Reveal component labels progressively to prevent collisions at board-fit zoom.
+        let showLabel = PCBViewportLayout.showsFootprintLabel(
+            zoom: zoomScale, isCritical: isCritical, isSelected: isSelected, isHovered: isHovered
         )
+        if showLabel {
+            let labelColor = isSelected ? Color.yellow : (isCritical ? Color.cyan : Color.white.opacity(0.85))
+            ctx.draw(
+                Text(fp.reference)
+                    .font(.system(size: max(7, min(11, 0.7 * zoomScale)), weight: .bold, design: .monospaced))
+                    .foregroundColor(labelColor),
+                at: CGPoint(x: pos.x, y: pos.y - boxSize/2 - 6)
+            )
+        }
         
         // Warning Badge Overlay if component has validation warnings
         if let check = session.pcbValidationResult?.checks.first(where: { $0.relatedComponentRef == fp.reference && $0.severity != .pass }) {
@@ -649,11 +662,10 @@ public struct PCBCanvasView: View {
     
     private func fitToBoard(in size: CGSize) {
         let board = session.pcbBoard
-        let availW = max(20, size.width - 60)
-        let availH = max(20, size.height - 60)
-        let scaleX = availW / CGFloat(board.widthMm)
-        let scaleY = availH / CGFloat(board.heightMm)
-        self.zoomScale = max(3.0, min(scaleX, scaleY))
+        guard let fittedZoom = PCBViewportLayout.fittedZoom(
+            boardWidthMm: board.widthMm, boardHeightMm: board.heightMm, canvasSize: size
+        ) else { return }
+        self.zoomScale = fittedZoom
         self.panOffset = .zero
         self.dragStartOffset = .zero
     }

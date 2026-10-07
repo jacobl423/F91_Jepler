@@ -36,6 +36,7 @@ public final class TerminalLogStore: ObservableObject {
     public static let shared = TerminalLogStore()
     
     private var nextLineId: Int = 0
+    public var onUartLine: ((String) -> Void)?
     
     // Tab 0: UART lines, Tab 1: Renode Monitor lines
     private var uartLines: [TerminalLogLine] = []
@@ -54,7 +55,15 @@ public final class TerminalLogStore: ObservableObject {
     
     // Published filtered view for UI rendering with stable IDs
     @Published public private(set) var filteredLines: [TerminalLogLine] = []
-    @Published public private(set) var filteredText: String = ""
+    public var filteredText: String { filteredLines.map(\.raw).joined(separator: "\n") }
+    public let maximumLines: Int
+    @Published public private(set) var discardedLineCount = 0
+    @Published public private(set) var groupedRadioWarnings = 0
+    private var seenRadioWarnings = Set<String>()
+    private var radioWarningCounts: [String: Int] = [:]
+    private var lastWarningSummary = Date()
+    private var uartPartial = ""
+    private var renodePartial = ""
     @Published public private(set) var logRevision: Int = 0
     
     // Raw string caches for backwards compatibility, copy, export
@@ -75,8 +84,8 @@ public final class TerminalLogStore: ObservableObject {
     private var uartFileOffset: UInt64 = 0
     private var uartPollingTimer: DispatchSourceTimer?
     
-    public init() {
-        startBatchFlushTimer()
+    public init(maximumLines: Int = 2000) {
+        self.maximumLines = max(1, maximumLines)
     }
     
     deinit {
@@ -104,92 +113,96 @@ public final class TerminalLogStore: ObservableObject {
     
     public func appendUart(text: String) {
         pendingUartBuffer += text
+        scheduleFlush()
     }
     
     public func appendRenodeConsole(text: String) {
-        // Strip out repetitive SaveFrame framebuffer commands from monitor log to avoid flooding buffer
-        let cleaned: String
-        if text.contains("SaveFrame") {
-            let lines = text.components(separatedBy: .newlines)
-            let filtered = lines.filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.contains("SaveFrame") { return false }
-                if trimmed == "(machine-0)" || trimmed == "(monitor)" { return false }
-                return !trimmed.isEmpty
-            }
-            if filtered.isEmpty { return }
-            cleaned = filtered.joined(separator: "\n") + "\n"
-        } else {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if (trimmed == "(machine-0)" || trimmed == "(monitor)") && renodeLines.count > 5 {
-                // Ignore stray bare prompts that arrive with no preceding command output
-                return
-            }
-            cleaned = text
-        }
-        
-        pendingRenodeBuffer += cleaned
+        // Filtering must happen after complete lines have been assembled.
+        pendingRenodeBuffer += text
+        scheduleFlush()
     }
     
     public func clear(tab: Int) {
         if tab == 0 {
             uartLines.removeAll()
+            uartPartial = ""
             pendingUartBuffer = ""
         } else {
             renodeLines.removeAll()
+            seenRadioWarnings.removeAll()
+            radioWarningCounts.removeAll()
+            groupedRadioWarnings = 0
+            renodePartial = ""
             pendingRenodeBuffer = ""
         }
         updateFilteredLines()
     }
     
-    private func startBatchFlushTimer() {
-        batchFlushTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.flushPendingBuffers()
-            }
+    private func scheduleFlush() {
+        guard batchFlushTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.15, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.flushPendingBuffers() }
         }
         RunLoop.main.add(timer, forMode: .common)
-        self.batchFlushTimer = timer
+        batchFlushTimer = timer
     }
-    
-    private func flushPendingBuffers() {
-        var hasChanges = false
-        
-        if !pendingUartBuffer.isEmpty {
-            let chunk = pendingUartBuffer
-            pendingUartBuffer = ""
-            processIncomingChunk(chunk, into: &uartLines)
-            hasChanges = true
-        }
-        
-        if !pendingRenodeBuffer.isEmpty {
-            let chunk = pendingRenodeBuffer
-            pendingRenodeBuffer = ""
-            processIncomingChunk(chunk, into: &renodeLines)
-            hasChanges = true
-        }
-        
-        if hasChanges {
-            updateFilteredLines()
-        }
+
+    func flushPendingBuffers() {
+        batchFlushTimer?.invalidate()
+        batchFlushTimer = nil
+        let uartChanged = consume(&pendingUartBuffer, partial: &uartPartial, into: &uartLines, onLine: onUartLine)
+        let renodeChanged = consume(&pendingRenodeBuffer, partial: &renodePartial, into: &renodeLines, groupRadioWarnings: true)
+        if selectedTab == 0 ? uartChanged : renodeChanged { updateFilteredLines() }
     }
-    
-    private func processIncomingChunk(_ chunk: String, into lineArray: inout [TerminalLogLine]) {
-        let rawSplits = chunk.components(separatedBy: .newlines)
-        for rawLine in rawSplits where !rawLine.isEmpty {
-            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
-            if trimmed.contains("SaveFrame") { continue }
-            
+
+    private func consume(_ pending: inout String, partial: inout String,
+                         into lines: inout [TerminalLogLine], onLine: ((String) -> Void)? = nil, groupRadioWarnings: Bool = false) -> Bool {
+        guard !pending.isEmpty else { return false }
+        let text = partial + pending
+        pending = ""
+        // A transport chunk is not a line. Retain the unfinished record.
+        let parts = text.components(separatedBy: "\n")
+        partial = String((parts.last ?? "").suffix(8192))
+        var changed = false
+        var grouped = 0
+        for raw in parts.dropLast() {
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.contains("SaveFrame"),
+                  line != "(monitor)", line != "(machine-0)" else { continue }
+            onLine?(line)
+            if groupRadioWarnings,
+               let marker = line.range(of: "[WARNING] radio: Unhandled ") {
+                let signature = String(line[marker.lowerBound...])
+                if !seenRadioWarnings.insert(signature).inserted {
+                    radioWarningCounts[signature, default: 0] += 1
+                    grouped += 1
+                    continue
+                }
+                // Bound the grouping index as well as the visible history.
+                if seenRadioWarnings.count > 256 { seenRadioWarnings.removeAll() }
+            }
             nextLineId += 1
-            let safeLine = rawLine.count > 8192 ? (String(rawLine.prefix(8192)) + " ... [truncated]") : rawLine
-            let entry = TerminalLogLine(id: nextLineId, raw: safeLine)
-            lineArray.append(entry)
+            lines.append(TerminalLogLine(id: nextLineId, raw: String(line.prefix(8192))))
+            changed = true
         }
+        if grouped > 0 { groupedRadioWarnings += grouped }
+        if groupRadioWarnings, Date().timeIntervalSince(lastWarningSummary) >= 5, !radioWarningCounts.isEmpty {
+            for (warning, count) in radioWarningCounts.sorted(by: { $0.key < $1.key }) {
+                nextLineId += 1
+                lines.append(TerminalLogLine(id: nextLineId, raw: "\(warning) [repeated \(count) more times]"))
+            }
+            radioWarningCounts.removeAll()
+            lastWarningSummary = Date()
+            changed = true
+        }
+        if lines.count > maximumLines {
+            let excess = lines.count - maximumLines
+            lines.removeFirst(excess)
+            discardedLineCount += excess
+        }
+        return changed
     }
-    
+
     public func updateFilteredLines() {
         let sourceLines = (selectedTab == 0) ? uartLines : renodeLines
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,7 +221,6 @@ public final class TerminalLogStore: ObservableObject {
         }
         
         self.filteredLines = matching
-        self.filteredText = matching.map(\.raw).joined(separator: "\n")
         self.logRevision &+= 1
     }
     

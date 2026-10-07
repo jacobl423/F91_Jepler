@@ -1,6 +1,23 @@
 import Foundation
 import CoreGraphics
 
+public enum PCBViewportLayout {
+    public static func fittedZoom(boardWidthMm: Double, boardHeightMm: Double, canvasSize: CGSize, inset: CGFloat = 36) -> CGFloat? {
+        guard boardWidthMm.isFinite, boardHeightMm.isFinite,
+              boardWidthMm > 0, boardHeightMm > 0,
+              canvasSize.width.isFinite, canvasSize.height.isFinite,
+              canvasSize.width > inset * 2, canvasSize.height > inset * 2 else { return nil }
+        let zoom = min((canvasSize.width - inset * 2) / CGFloat(boardWidthMm),
+                       (canvasSize.height - inset * 2) / CGFloat(boardHeightMm))
+        guard zoom.isFinite, zoom > 0 else { return nil }
+        return min(40, zoom)
+    }
+
+    public static func showsFootprintLabel(zoom: CGFloat, isCritical: Bool, isSelected: Bool, isHovered: Bool) -> Bool {
+        isSelected || isHovered || zoom >= 10 || (isCritical && zoom >= 6)
+    }
+}
+
 public struct Point2D: Equatable, Hashable, Codable {
     public let x: Double
     public let y: Double

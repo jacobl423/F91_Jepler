@@ -85,29 +85,28 @@ public struct TerminalView: View {
                     .font(.system(size: 11))
                 }
                 
-                // Category Filter Chips
-                WrappingToolbar(spacing: 6) {
-                    Text("Filter:")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(LogCategory.allCases) { cat in
-                        Button(action: { logStore.selectedCategory = cat }) {
-                            Text(cat.rawValue)
-                                .font(.system(size: 9.5, weight: logStore.selectedCategory == cat ? .bold : .medium))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2.5)
-                                .background(logStore.selectedCategory == cat ? Color.accentColor : Color.primary.opacity(0.06))
-                                .foregroundColor(logStore.selectedCategory == cat ? .white : .primary)
-                                .cornerRadius(10)
+                HStack {
+                    Picker("Filter", selection: $logStore.selectedCategory) {
+                        ForEach(LogCategory.allCases) { category in
+                            Text(category.rawValue).tag(category)
                         }
-                        .buttonStyle(.plain)
                     }
-                    
-                    
+                    .labelsHidden()
+                    .frame(maxWidth: 180)
+                    Spacer()
                     Text("\(logStore.filteredLines.count.formatted()) lines")
-                        .font(.system(size: 9.5, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .help("Keeps the latest \(logStore.maximumLines) lines per source. Older lines leave this view; UART evidence is saved when the session stops.")
+                }
+                if logStore.selectedTab == 1 && logStore.groupedRadioWarnings > 0 {
+                    Text("\(logStore.groupedRadioWarnings.formatted()) repeated radio-model warnings grouped. Radio emulation is incomplete.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if logStore.discardedLineCount > 0 {
+                    Text("Showing recent history · older lines trimmed")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .padding(8)
@@ -252,6 +251,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
                               (context.coordinator.renderedSearchText != currentSearch) ||
                               (lines.isEmpty && context.coordinator.renderedLineCount > 0) ||
                               (lines.count < context.coordinator.renderedLineCount) ||
+                              (context.coordinator.renderedFirstID != lines.first?.id) ||
                               (context.coordinator.renderedRevision == -1)
         
         if fullResetNeeded {
@@ -260,6 +260,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
             context.coordinator.renderedSearchText = currentSearch
             context.coordinator.renderedRevision = currentRevision
             context.coordinator.renderedLineCount = lines.count
+            context.coordinator.renderedFirstID = lines.first?.id
             
             if lines.isEmpty {
                 let placeholderText = (currentTab == 0) ? "Waiting for Zephyr UART stream / MCUboot..." : "Waiting for Renode console stream..."
@@ -347,6 +348,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
         weak var textView: NSTextView?
         weak var scrollView: NSScrollView?
         var renderedLineCount: Int = 0
+        var renderedFirstID: Int?
         var renderedTab: Int = -1
         var renderedCategory: LogCategory = .all
         var renderedSearchText: String = ""

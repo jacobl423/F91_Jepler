@@ -5,8 +5,11 @@ public struct HardwareSetupView: View {
     @ObservedObject var session: EmulatorSession
     @Environment(\.dismiss) private var dismiss
     
-    public init(session: EmulatorSession) {
+    private let onBuildAndRun: (() -> Void)?
+
+    public init(session: EmulatorSession, onBuildAndRun: (() -> Void)? = nil) {
         self.session = session
+        self.onBuildAndRun = onBuildAndRun
     }
     
     public var body: some View {
@@ -211,9 +214,14 @@ public struct HardwareSetupView: View {
                 
                 Spacer()
                 
-                Button("Apply & Restart Emulation") {
+                Button("Start Existing Firmware") {
                     session.startSession()
                     dismiss()
+                }
+                .buttonStyle(.bordered)
+                Button("Build & Run") {
+                    dismiss()
+                    onBuildAndRun?()
                 }
                 .buttonStyle(.borderedProminent)
             }

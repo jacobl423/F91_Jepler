@@ -12,6 +12,13 @@ public struct PinAuditEntry: Identifiable, Equatable {
     public let connectedNet: String
     public let status: PinAuditStatus
     public var isMatching: Bool { status == .verified }
+    public var repairGuidance: String? {
+        guard status == .unknown else { return nil }
+        if expectedPin.hasPrefix("Unknown") {
+            return "Firmware pin map is unavailable. Build & Run to load the compiled pin assignments."
+        }
+        return "PCB connection not found. In KiCad, check the switch-to-U1 net and MCU pad function (or the SDA/SCL net label)."
+    }
 }
 
 public struct GPIOPinAuditResult: Equatable {

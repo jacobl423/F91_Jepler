@@ -122,12 +122,30 @@ public struct KiCadPcbView: View {
                         Text(audit.hasMismatches ? "PCB / Firmware Pin Mismatch" : "PCB / Firmware Pin Audit Incomplete")
                             .font(.system(size: 10.5, weight: .bold))
                             .foregroundColor(.orange)
-                        Text(audit.entries.filter { !$0.isMatching }.map { "\($0.signalName): \($0.detectedPin) (expected \($0.expectedPin))" }.joined(separator: " • "))
-                            .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundColor(.secondary)
+                        ForEach(audit.entries.filter { !$0.isMatching }) { entry in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(entry.signalName): PCB \(entry.detectedPin) · firmware \(entry.expectedPin) · net \(entry.connectedNet)")
+                                    .font(.system(size: 9.5, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                if let guidance = entry.repairGuidance {
+                                    Text(guidance)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.primary)
+                                }
+                            }
+                        }
                     }
                     Spacer()
-
+                    if !session.hasVerifiedFirmwareForAudit {
+                        Button("Configure & Validate") { session.showSetupSheet = true }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    } else {
+                        Button("Open PCB in KiCad") { session.openInKiCad(appType: .pcbEditor) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(session.activePCBURL == nil)
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)

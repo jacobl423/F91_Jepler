@@ -20,13 +20,19 @@ public struct KiCadDRCView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.shield.fill")
                         .foregroundColor(session.kicadDRCReport?.isClean == true ? .green : .orange)
-                    Text("KICAD DESIGN RULES CHECK (DRC)")
+                    Text("KICAD DESIGN RULES CHECK (DRC) · \(session.kicadDRCReport?.confidence.rawValue.uppercased() ?? "NOT RUN")")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                 }
                 
                 Spacer()
                 
                 if let report = session.kicadDRCReport {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("Source SHA-256 \(report.sourceSHA256)")
+                        Text("\(report.toolVersion) · exit \(report.exitCode) · \(report.schemaIsKnown ? "known JSON schema" : "unknown JSON schema")")
+                    }
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         Badge(count: report.errorCount, label: "Errors", color: .red)
                         Badge(count: report.warningCount, label: "Warnings", color: .orange)
@@ -79,10 +85,10 @@ public struct KiCadDRCView: View {
                 if items.isEmpty {
                     VStack(spacing: 8) {
                         Spacer()
-                        Image(systemName: "checkmark.circle")
+                        Image(systemName: report.isClean ? "checkmark.circle" : "info.circle")
                             .font(.system(size: 36))
-                            .foregroundColor(.green)
-                        Text("No DRC violations matching filter")
+                            .foregroundColor(report.isClean ? .green : .orange)
+                        Text("No DRC violations matching filter · SHA-256 \(report.sourceSHA256) · \(report.toolVersion)")
                             .font(.system(size: 13, weight: .semibold))
                         Spacer()
                     }

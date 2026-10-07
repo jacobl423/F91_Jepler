@@ -47,29 +47,43 @@ public final class FirmwareBuildController: ObservableObject {
                     self.process = nil
                     self.output = (try? String(contentsOf: logURL)) ?? "Unable to read build log."
                     guard process.terminationStatus == 0, let session else {
-                        self.status = "Build failed (\(process.terminationStatus)); open build log for details."
+                        let lastLine = self.output
+                            .split(whereSeparator: { $0.isNewline })
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .last { !$0.isEmpty }
+                        self.status = "Build failed (exit " + String(process.terminationStatus) + (lastLine.map { ": " + $0 } ?? "")
                         return
                     }
                     do {
                         let image = root.appendingPathComponent("build/renode-app/app.signed.bin")
                         let manifest = try FirmwareBuildManifest.load(for: image)
                         _ = try manifest.verifiedELF(relativeTo: image)
+                        try manifest.verifyConfig(relativeTo: image)
+                        let bootloader = root.appendingPathComponent("build/renode-app/mcuboot.elf")
+                        guard FileManager.default.fileExists(atPath: bootloader.path) else {
+                            throw FirmwareBuildManifest.ManifestError.invalid("Build did not export the matching MCUboot ELF.")
+                        }
+                        try manifest.verifyMCUboot(bootloader)
                         session.stopSession()
                         session.customWorkspaceURL = root
                         session.updateAsset(kind: .appFirmware, url: image)
-                        let bootloader = root.appendingPathComponent("bin/mcuboot.elf")
-                        if FileManager.default.fileExists(atPath: bootloader.path) {
-                            session.updateAsset(kind: .bootloader, url: bootloader)
-                        }
-                        self.status = "Built \(manifest.sourceRevision.prefix(8))\(manifest.sourceDirty ? " + local edits" : "") · SHA \(manifest.imageSHA256.prefix(12))"
+                        session.updateAsset(kind: .bootloader, url: bootloader)
+                        self.status = "Firmware pair verified; starting Renode…"
                         session.startSession()
                     } catch {
-                        self.status = "Build output verification failed: \(error.localizedDescription)"
+                        self.status = "Build verification failed: " + error.localizedDescription
                     }
                 }
             }
             process = proc
             try proc.run()
+            Task { @MainActor [weak self] in
+                while let self, self.isBuilding {
+                    try? await Task.sleep(nanoseconds: 750_000_000)
+                    guard self.isBuilding else { break }
+                    self.output = (try? String(contentsOf: logURL)) ?? self.output
+                }
+            }
         } catch {
             isBuilding = false
             process = nil
@@ -77,16 +91,23 @@ public final class FirmwareBuildController: ObservableObject {
         }
     }
 
+    public func sessionDidStart() {
+        status = "Renode running · ready for emulator tests"
+    }
+
     public func cancel() {
         process?.terminate()
     }
 
     public func workspaceRoot(session: EmulatorSession) -> URL? {
-        if let custom = session.customWorkspaceURL { return custom }
+        if let custom = session.customWorkspaceURL {
+            let marker = custom.appendingPathComponent("Firmware/renode/build-display.sh")
+            return FileManager.default.fileExists(atPath: marker.path) ? custom.standardizedFileURL : nil
+        }
         let starts = [URL(fileURLWithPath: FileManager.default.currentDirectoryPath), Bundle.main.bundleURL]
         for start in starts {
             var candidate = start
-            for _ in 0..<9 {
+            for _ in 0..<12 {
                 if FileManager.default.fileExists(atPath: candidate.appendingPathComponent("Firmware/renode/build-display.sh").path) {
                     return candidate
                 }

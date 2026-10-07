@@ -5,6 +5,8 @@ public struct OLEDCanvasView: View {
     @ObservedObject var displayStore: DisplayStreamStore
     @ObservedObject var session: EmulatorSession
     
+    @State private var showDiagnostics = false
+
     public init(session: EmulatorSession) {
         self.session = session
         self.displayStore = session.displayStore
@@ -22,11 +24,12 @@ public struct OLEDCanvasView: View {
                 .pickerStyle(.menu)
                 .frame(maxWidth: 290)
                 
-                Toggle("Pixel Grid Mesh", isOn: $displayStore.showPixelGridMesh)
+                Toggle("Pixel grid", isOn: $displayStore.showPixelGridMesh)
                     .toggleStyle(.checkbox)
                     .font(.system(size: 11))
                 
                 
+                DisclosureGroup("Display diagnostics", isExpanded: $showDiagnostics) {
                 // Host ingestion statistics; firmware draw calls are not measured.
                 WrappingToolbar(spacing: 12) {
                     HStack(spacing: 4) {
@@ -69,13 +72,16 @@ public struct OLEDCanvasView: View {
                 .padding(.vertical, 4)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(6)
+                }
+                .font(.caption)
             }
             .padding(.horizontal, 10)
             .padding(.top, 6)
             
-            Text("96 × 39 visible pixels · firmware backing height: 40 rows · host samples may repeat")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
+            if showDiagnostics {
+                Text("96 × 39 pixels · host samples may repeat; sample rate is not firmware FPS")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
 
             // OLED Canvas Frame
             ZStack {
@@ -112,7 +118,7 @@ public struct OLEDCanvasView: View {
                         Text("BuyDisplay 0.83\" 96 × 39 White OLED (ER-OLED0.83-1)")
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundColor(displayStore.oledTheme.litColor)
-                        Text(session.isRunning ? "Ingesting I2C Framebuffer (0x3C)..." : "Renode Emulation Inactive")
+                        Text(session.isRunning ? "Waiting for the watch display…" : "Start the emulator to see the watch")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
                     }

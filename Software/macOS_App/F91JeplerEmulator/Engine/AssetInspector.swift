@@ -86,7 +86,8 @@ public enum AssetInspector {
                 formatBadge: "Empty",
                 secondaryDetail: "0 bytes",
                 isCustom: isCustom,
-                sha256Prefix: nil,
+                sha256: nil,
+                isSHA256Complete: false,
                 detectedFormat: .unknown
             )
         }
@@ -101,8 +102,9 @@ public enum AssetInspector {
             throw AssetInspectionError.emptyFile(filePath)
         }
 
-        // 3. Compute SHA256 Prefix (First 8 Hex Chars)
-        let sha256Prefix = computeSHA256Prefix(fileHandle: fileHandle, initialData: headerData, totalSize: fileSizeBytes)
+        // 3. Compute the full-file SHA-256; trust decisions must not rely on a prefix/sample.
+        let sha256 = computeSHA256(fileHandle: fileHandle, initialData: headerData, totalSize: fileSizeBytes)
+        guard let sha256 else { throw AssetInspectionError.unreadableFile("Could not hash all bytes of \(filePath)") }
 
         // 4. Inspect Header Magic & Identify Format
         let detection = parseHeader(data: headerData, url: url, kind: kind, fileSizeBytes: fileSizeBytes)
@@ -117,7 +119,8 @@ public enum AssetInspector {
             formatBadge: detection.badge,
             secondaryDetail: detection.detail,
             isCustom: isCustom,
-            sha256Prefix: sha256Prefix,
+            sha256: sha256,
+            isSHA256Complete: true,
             detectedFormat: detection.format
         )
     }
@@ -429,28 +432,19 @@ public enum AssetInspector {
 
     // MARK: - SHA256 Prefix Computation
 
-    private static func computeSHA256Prefix(fileHandle: FileHandle, initialData: Data, totalSize: Int64) -> String? {
+    private static func computeSHA256(fileHandle: FileHandle, initialData: Data, totalSize: Int64) -> String? {
         var hasher = SHA256()
         hasher.update(data: initialData)
-
-        // If file is smaller than or equal to initial chunk, finalize immediately
-        if totalSize <= Int64(initialData.count) {
-            let digest = hasher.finalize()
-            return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
-        }
-
-        // For larger files, stream up to 1 MB to balance throughput with instantaneous UI feedback
-        let maxStreamBytes = min(totalSize, 1024 * 1024)
         var bytesRead = Int64(initialData.count)
 
-        while bytesRead < maxStreamBytes {
-            let chunkSize = min(65536, Int(maxStreamBytes - bytesRead))
-            guard let chunk = try? fileHandle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+        while bytesRead < totalSize {
+            let chunkSize = min(1024 * 1024, Int(totalSize - bytesRead))
+            guard let chunk = try? fileHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return nil }
             hasher.update(data: chunk)
             bytesRead += Int64(chunk.count)
         }
 
-        let digest = hasher.finalize()
-        return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+        guard bytesRead == totalSize else { return nil }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

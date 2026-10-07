@@ -2,14 +2,16 @@ import SwiftUI
 
 public struct AutomatedTestRunnerView: View {
     @ObservedObject var session: EmulatorSession
+    private let onBuildAndRun: (() -> Void)?
     
     @State private var selectedPresetIndex: Int = 0
     @State private var customSequenceInput: String = "B, B, C, B"
     @State private var customHoldMs: Double = 150
     @State private var customPauseMs: Double = 250
     
-    public init(session: EmulatorSession) {
+    public init(session: EmulatorSession, onBuildAndRun: (() -> Void)? = nil) {
         self.session = session
+        self.onBuildAndRun = onBuildAndRun
     }
     
     public var body: some View {
@@ -35,12 +37,24 @@ public struct AutomatedTestRunnerView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
-                        .disabled(session.isBootTestRunning)
+                        .disabled(session.isBootTestRunning || !session.isRunning)
+                        .help(session.isRunning ? "Runs a fresh emulator boot and checks UART milestones." : "Use Build & Run first; there is no running firmware to reboot.")
                     }
                     
-                    Text("Validates Renode startup, MCUboot dual-bank chainloader, flash slot validation, Zephyr RTOS kernel, SSD1306 framebuffer, and BLE advertising.")
+                    Text("Validates fresh MCUboot handoff and app UART startup markers, including display initialization and BLE advertising startup. This does not test RF, BLE connections, or OTA rollback.")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
+                    if !session.isRunning {
+                        HStack {
+                            Label("No firmware is running yet.", systemImage: "info.circle")
+                                .font(.system(size: 11))
+                            Spacer()
+                            Button("Build & Run") { onBuildAndRun?() }
+                                .buttonStyle(.borderedProminent)
+                            Button("Configure") { session.showSetupSheet = true }
+                                .buttonStyle(.bordered)
+                        }
+                    }
                     
                     // Checklist of Boot Stages
                     VStack(spacing: 8) {

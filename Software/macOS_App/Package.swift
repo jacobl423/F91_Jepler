@@ -30,6 +30,11 @@ let package = Package(
                 .copy("Resources/Embedded")
             ],
             swiftSettings: swiftSettings
+        ),
+        .testTarget(
+            name: "F91JeplerEmulatorTests",
+            dependencies: ["F91JeplerEmulator"],
+            path: "Tests/F91JeplerEmulatorTests"
         )
     ],
     swiftLanguageVersions: [.v5]

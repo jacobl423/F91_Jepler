@@ -109,6 +109,8 @@ public struct NetDetail: Identifiable, Equatable {
 }
 
 public struct PCBValidationResult: Equatable {
+    public let sourceSHA256: String?
+    public let confidence: ValidationConfidence
     public let checks: [ValidationCheck]
     public let componentBOM: [BOMEntry]
     public let overallScore: Double  // 0.0 - 1.0 (e.g. 0.95 -> 95%)
@@ -120,8 +122,12 @@ public struct PCBValidationResult: Equatable {
         componentBOM: [BOMEntry],
         overallScore: Double,
         isReadyForFabrication: Bool,
+        sourceSHA256: String? = nil,
+        confidence: ValidationConfidence = .advisory,
         generatedAt: Date = Date()
     ) {
+        self.sourceSHA256 = sourceSHA256
+        self.confidence = confidence
         self.checks = checks
         self.componentBOM = componentBOM
         self.overallScore = min(1.0, max(0.0, overallScore))
