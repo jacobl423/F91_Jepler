@@ -73,15 +73,15 @@ static void on_clock_time_changed(uint32_t timestamp)
 
 static void on_clock_tz_changed(int16_t tz)
 {
+	/* The time callback owns epoch_base_ms; changing timezone only changes display offset. */
 	screen_dirty = true;
-	epoch_base_ms = k_uptime_get() - (int64_t)timestamp * 1000;
 	printk("[SERVICE] Clock timezone set to: %d\n", tz);
 }
 
 static void on_clock_timemode_changed(uint8_t mode)
 {
+	/* A display-format change must not reset elapsed time or the epoch base. */
 	screen_dirty = true;
-	epoch_base_ms = k_uptime_get() - (int64_t)timestamp * 1000;
 	printk("[SERVICE] Clock timemode set to: %u (%s)\n", mode, mode ? "24-hr" : "12-hr");
 }
 

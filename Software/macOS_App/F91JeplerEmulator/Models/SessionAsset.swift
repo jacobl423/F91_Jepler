@@ -110,7 +110,8 @@ public struct AssetMetadata: Identifiable, Equatable, Hashable, Codable, Sendabl
     public let formatBadge: String
     public let secondaryDetail: String
     public let isCustom: Bool
-    public let sha256Prefix: String?
+    public let sha256: String?
+    public let isSHA256Complete: Bool
     public let detectedFormat: DetectedAssetFormat
 
     public init(
@@ -123,7 +124,8 @@ public struct AssetMetadata: Identifiable, Equatable, Hashable, Codable, Sendabl
         formatBadge: String,
         secondaryDetail: String,
         isCustom: Bool,
-        sha256Prefix: String? = nil,
+        sha256: String? = nil,
+        isSHA256Complete: Bool = false,
         detectedFormat: DetectedAssetFormat = .unknown
     ) {
         self.fileName = fileName
@@ -135,7 +137,8 @@ public struct AssetMetadata: Identifiable, Equatable, Hashable, Codable, Sendabl
         self.formatBadge = formatBadge
         self.secondaryDetail = secondaryDetail
         self.isCustom = isCustom
-        self.sha256Prefix = sha256Prefix
+        self.sha256 = sha256
+        self.isSHA256Complete = isSHA256Complete
         self.detectedFormat = detectedFormat
     }
 }

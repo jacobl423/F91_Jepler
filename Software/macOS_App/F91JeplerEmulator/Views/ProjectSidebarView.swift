@@ -31,6 +31,23 @@ public struct ProjectSidebarView: View {
             // 2. Scrollable Asset Dropzone Cards
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: 8) {
+                    if let source = session.activeRunProvenance["app.sourcePath"] {
+                        DisclosureGroup("Running firmware") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(source).textSelection(.enabled)
+                                Text(session.activeRunProvenance["firmwarePairVerification"] ?? "Verification unavailable")
+                                if let evidence = session.activeRunManifestURL {
+                                    Button("Reveal run evidence") {
+                                        NSWorkspace.shared.activateFileViewerSelecting([evidence])
+                                    }
+                                }
+                            }
+                            .font(.caption2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(.caption)
+                        .padding(8)
+                    }
                     ForEach(SessionAssetKind.allCases) { kind in
                         SessionAssetCardView(kind: kind, session: session)
                     }
@@ -380,30 +397,20 @@ private struct DropzoneBox: View {
                             .lineLimit(1)
                     }
 
-                    // Size, Date, SHA-256
-                    HStack(spacing: 4) {
-                        Text(asset.fileSizeFormatted)
-                            .font(.system(size: 8.5, weight: .medium, design: .monospaced))
-                            .foregroundColor(.secondary)
-
-                        Text("·")
-                            .font(.system(size: 8.5))
-                            .foregroundColor(.secondary)
-
-                        Text(asset.modificationDateFormatted)
-                            .font(.system(size: 8.5))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-
-                        if let sha = asset.metadata?.sha256Prefix {
-                            Text("·")
-                                .font(.system(size: 8.5))
+                    DisclosureGroup("File details") {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(asset.fileSizeFormatted) · modified \(asset.modificationDateFormatted)")
+                                .font(.system(size: 8.5, design: .monospaced))
                                 .foregroundColor(.secondary)
-                            Text("sha:\(sha)")
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundColor(.secondary)
+                            if let metadata = asset.metadata, let sha = metadata.sha256, metadata.isSHA256Complete {
+                                Text("SHA-256 \(sha)")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                            }
                         }
                     }
+                    .font(.system(size: 9))
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)

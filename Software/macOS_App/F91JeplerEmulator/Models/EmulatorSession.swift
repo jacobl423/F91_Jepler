@@ -33,6 +33,21 @@ public final class EmulatorSession: ObservableObject {
     @Published public var isRunning: Bool = false
     @Published public var statusMessage: String = "Ready"
     @Published public var errorMessage: String? = nil
+    @Published public var isSessionStarting = false
+    @Published public var notificationTestStatus: String? = nil
+    @Published public var notificationTestSucceeded = false
+    @Published public var isHarnessBusy = false
+    @Published public private(set) var isFirmwareReady = false
+    @Published public private(set) var isBridgeReady = false
+    public var canSendTestRequest: Bool {
+        isRunning && isBridgeReady && !isHarnessBusy && !isBootTestRunning && !isSequenceRunning
+    }
+    public var runtimeLabel: String {
+        if isSessionStarting { return "Starting emulator…" }
+        if isFirmwareReady && isRunning { return "Firmware ready" }
+        return isRunning ? "Waiting for firmware…" : "Stopped"
+    }
+    private(set) var hasVerifiedFirmwareForAudit = false
     
     // MARK: - Project Sidebar & Layout State
     @Published public var isSidebarVisible: Bool = true {
@@ -59,7 +74,12 @@ public final class EmulatorSession: ObservableObject {
         }
     }
     
-    @Published public var watchPanelHeight: CGFloat = 340
+    @Published public var terminalWidth: CGFloat = 360 {
+        didSet { userDefaults.set(Double(terminalWidth), forKey: "workbench.terminalWidth") }
+    }
+    @Published public var watchPanelHeight: CGFloat = 340 {
+        didSet { userDefaults.set(Double(watchPanelHeight), forKey: "workbench.watchPanelHeight") }
+    }
     @Published public var terminalPanelHeight: CGFloat = 280
     @Published public var pressedKeys: Set<String> = [] // "1" (Light), "2" (Mode), "3" (Toggle)
     @Published public var pcbBoard: KiCadBoard = KiCadBoard()
@@ -205,6 +225,8 @@ public final class EmulatorSession: ObservableObject {
     @Published public var selectedNetName: String? = nil
     @Published public var hiddenComponentRefs: Set<String> = []
     @Published public var pcbValidationResult: PCBValidationResult? = nil
+    @Published public var pcbValidationSHA256: String? = nil
+    @Published public var pcbValidationError: String? = nil
     @Published public var comparisonBoard: KiCadBoard? = nil
     
     @Published public var showSetupSheet: Bool = false
@@ -218,6 +240,16 @@ public final class EmulatorSession: ObservableObject {
     @Published public var isRendering3D: Bool = false
     @Published public var show3DRenderMode: Bool = false
     @Published public var kicadDRCReport: KiCadDRCReport? = nil
+    @Published public var isRescReviewPresented = false
+    @Published public var rescReviewText = ""
+    @Published public var rescReviewSHA256: String? = nil
+    @Published public var rescReviewReferenceEvidence: [RenodeScriptReferenceEvidence] = []
+    @Published public var approvedRescSHA256: String? = nil
+    @Published public var approvedRescReferences: [RenodeScriptReferenceEvidence] = []
+    @Published public var activeRunID: UUID? = nil
+    @Published public var activeRunManifestURL: URL? = nil
+    @Published public var activeRunProvenance: [String: String] = [:]
+    private var verifiedBuildManifest: FirmwareBuildManifest? = nil
     @Published public var isRunningDRC: Bool = false
     @Published public var isExportingGerbers: Bool = false
     @Published public var exportedGerbersURL: URL? = nil
@@ -247,9 +279,14 @@ public final class EmulatorSession: ObservableObject {
             self.isTerminalVisible = userDefaults.bool(forKey: SessionPersistenceKeys.isTerminalVisible)
         }
 
+        let terminal = userDefaults.double(forKey: "workbench.terminalWidth")
+        if terminal.isFinite && terminal >= 276 { terminalWidth = terminal }
+        let height = userDefaults.double(forKey: "workbench.watchPanelHeight")
+        if height.isFinite && height >= 200 && height <= 600 { watchPanelHeight = height }
+
         // 2. Restore Sidebar Width
         let savedWidth = CGFloat(userDefaults.double(forKey: SessionPersistenceKeys.sidebarWidth))
-        if savedWidth >= 230 && savedWidth <= 380 {
+        if savedWidth >= 246 && savedWidth <= 396 {
             self.sidebarWidth = savedWidth
         } else {
             self.sidebarWidth = 280
@@ -405,7 +442,10 @@ public final class EmulatorSession: ObservableObject {
             self.reloadPCB(fileURL: url)
             self.startWatchingActivePCB()
             self.pcbReloadToast = "Loaded custom PCB: \(url.lastPathComponent)"
-        case .appFirmware, .bootloader, .rescScript:
+        case .appFirmware, .bootloader:
+            verifiedBuildManifest = nil
+            hasVerifiedFirmwareForAudit = false
+            auditGPIOPins()
             if isRunning {
                 self.pcbReloadToast = "Updated \(kind.title); restarting emulation..."
                 stopSession()
@@ -413,6 +453,10 @@ public final class EmulatorSession: ObservableObject {
             } else {
                 self.statusMessage = "Loaded \(url.lastPathComponent)"
             }
+        case .rescScript:
+            approvedRescSHA256 = nil
+            approvedRescReferences = []
+            reviewRescScript(url: url)
         }
     }
     
@@ -428,7 +472,10 @@ public final class EmulatorSession: ObservableObject {
             self.reloadPCB(fileURL: defaultURL)
             self.startWatchingActivePCB()
             self.pcbReloadToast = "Reverted PCB to default"
-        case .appFirmware, .bootloader, .rescScript:
+        case .appFirmware, .bootloader:
+            verifiedBuildManifest = nil
+            hasVerifiedFirmwareForAudit = false
+            auditGPIOPins()
             if isRunning {
                 self.pcbReloadToast = "Reverted \(kind.title); restarting emulation..."
                 stopSession()
@@ -436,6 +483,13 @@ public final class EmulatorSession: ObservableObject {
             } else {
                 self.statusMessage = "Reverted \(kind.title) to default"
             }
+        case .rescScript:
+            approvedRescSHA256 = nil
+            approvedRescReferences = []
+            isRescReviewPresented = false
+            rescReviewSHA256 = nil
+            rescReviewReferenceEvidence = []
+            rescReviewText = ""
         }
     }
     
@@ -455,7 +509,10 @@ public final class EmulatorSession: ObservableObject {
         case .pcb:
             self.reloadPCB(fileURL: url)
             self.pcbReloadToast = "Reloaded \(url.lastPathComponent)"
-        case .appFirmware, .bootloader, .rescScript:
+        case .appFirmware, .bootloader:
+            verifiedBuildManifest = nil
+            hasVerifiedFirmwareForAudit = false
+            auditGPIOPins()
             if isRunning {
                 self.pcbReloadToast = "Reloaded \(url.lastPathComponent); restarting emulation..."
                 stopSession()
@@ -463,6 +520,10 @@ public final class EmulatorSession: ObservableObject {
             } else {
                 self.pcbReloadToast = "Reloaded metadata for \(url.lastPathComponent)"
             }
+        case .rescScript:
+            approvedRescSHA256 = nil
+            approvedRescReferences = []
+            reviewRescScript(url: url)
         }
     }
     
@@ -488,12 +549,51 @@ public final class EmulatorSession: ObservableObject {
     // MARK: - KiCad Board Management & Live Watcher
     
     public func validateActiveBoard() {
-        self.pcbValidationResult = PCBValidator.validate(board: self.pcbBoard)
+        guard let pcbURL = activePCBURL else {
+            pcbValidationResult = nil
+            pcbValidationSHA256 = nil
+            pcbValidationError = "No PCB file selected."
+            auditGPIOPins()
+            return
+        }
+        do {
+            let digestBefore = try FirmwareBuildManifest.digest(pcbURL)
+            guard let parsed = try? KiCadParser.parse(fileURL: pcbURL), parsed == pcbBoard else {
+                pcbValidationResult = nil
+                pcbValidationSHA256 = nil
+                pcbValidationError = "Current editor model does not match the selected PCB file; reload before validation."
+                auditGPIOPins()
+                return
+            }
+            let heuristic = PCBValidator.validate(board: parsed)
+            let digestAfter = try FirmwareBuildManifest.digest(pcbURL)
+            guard digestBefore == digestAfter else {
+                pcbValidationResult = nil
+                pcbValidationSHA256 = nil
+                pcbValidationError = "PCB changed during validation; result is inconclusive. Run again."
+                auditGPIOPins()
+                return
+            }
+            pcbValidationResult = PCBValidationResult(checks: heuristic.checks, componentBOM: heuristic.componentBOM,
+                                                      overallScore: heuristic.overallScore,
+                                                      isReadyForFabrication: heuristic.isReadyForFabrication,
+                                                      sourceSHA256: digestAfter, confidence: .advisory,
+                                                      generatedAt: heuristic.generatedAt)
+            pcbValidationSHA256 = digestAfter
+            pcbValidationError = nil
+        } catch {
+            pcbValidationResult = nil
+            pcbValidationSHA256 = nil
+            pcbValidationError = "Could not verify selected PCB bytes: \(error.localizedDescription)"
+        }
         auditGPIOPins()
     }
     
     public func auditGPIOPins() {
-        self.pinAuditResult = GPIOPinAuditor.audit(board: self.pcbBoard)
+        self.pinAuditResult = GPIOPinAuditor.audit(
+            board: self.pcbBoard,
+            firmwareManifest: hasVerifiedFirmwareForAudit ? verifiedBuildManifest : nil
+        )
     }
     
     public func syncRenodeWithKiCadPins() {
@@ -598,9 +698,14 @@ public final class EmulatorSession: ObservableObject {
         Task { @MainActor in
             do {
                 let report = try await KiCadToolService.shared.runDRC(pcbURL: pcbURL)
+                let currentDigest = try FirmwareBuildManifest.digest(pcbURL)
+                guard currentDigest == report.sourceSHA256 else {
+                    self.kicadDRCReport = nil
+                    throw HarnessError.failure("PCB changed after DRC; report not attached to current file. Run DRC again.")
+                }
                 self.kicadDRCReport = report
                 self.isRunningDRC = false
-                self.pcbReloadToast = "KiCad DRC: \(report.errorCount) errors, \(report.unconnectedCount) unconnected"
+                self.pcbReloadToast = "KiCad DRC \(report.confidence.rawValue): \(report.errorCount) errors, \(report.unconnectedCount) unconnected · SHA-256 \(report.sourceSHA256)"
             } catch {
                 self.isRunningDRC = false
                 self.errorMessage = "KiCad DRC Execution Error: \(error.localizedDescription)"
@@ -661,23 +766,166 @@ public final class EmulatorSession: ObservableObject {
     
     // MARK: - Process Lifecycle & Socket Bridge (Module A)
     
+    public func reviewRescScript(url: URL) {
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let digest = try FirmwareBuildManifest.digest(url)
+            let references = try RenodeProcessManager.referenceEvidence(in: text, relativeTo: url.deletingLastPathComponent())
+            rescReviewText = text
+            rescReviewSHA256 = digest
+            rescReviewReferenceEvidence = references
+            isRescReviewPresented = true
+        } catch {
+            rescReviewSHA256 = nil
+            rescReviewReferenceEvidence = []
+            rescReviewText = ""
+            errorMessage = "Unable to review Renode script: \(error.localizedDescription)"
+        }
+    }
+
+    public func approveReviewedRescScript() {
+        guard let url = assets[.rescScript]?.fileURL,
+              let reviewed = rescReviewSHA256 else { return }
+        do {
+            guard try FirmwareBuildManifest.digest(url) == reviewed else {
+                throw HarnessError.failure("Script changed after review. Inspect it again before running.")
+            }
+            let currentText = try String(contentsOf: url, encoding: .utf8)
+            let currentReferences = try RenodeProcessManager.referenceEvidence(in: currentText, relativeTo: url.deletingLastPathComponent())
+            guard currentText == rescReviewText, currentReferences == rescReviewReferenceEvidence else {
+                throw HarnessError.failure("A referenced script resource changed after review. Review the script and resources again.")
+            }
+            approvedRescSHA256 = reviewed
+            approvedRescReferences = currentReferences
+            isRescReviewPresented = false
+            startSession()
+        } catch {
+            errorMessage = error.localizedDescription
+            approvedRescSHA256 = nil
+        }
+    }
+
+    private static func discoverWorkspaceRoot() -> URL? {
+        let starts = [URL(fileURLWithPath: FileManager.default.currentDirectoryPath), Bundle.main.bundleURL]
+        for start in starts {
+            var candidate = start
+            for _ in 0..<12 {
+                if FileManager.default.fileExists(atPath: candidate.appendingPathComponent("Firmware/renode/build-display.sh").path) {
+                    return candidate.standardizedFileURL
+                }
+                let parent = candidate.deletingLastPathComponent()
+                if parent == candidate { break }
+                candidate = parent
+            }
+        }
+        return nil
+    }
+
+    private static func verifyFirmware(image: URL, bootloader: URL) async -> FirmwareBuildManifest? {
+        await Task.detached(priority: .userInitiated) {
+            guard let manifest = try? FirmwareBuildManifest.load(for: image),
+                  (try? manifest.verifyMCUboot(bootloader)) != nil,
+                  (try? manifest.verifyConfig(relativeTo: image)) != nil,
+                  (try? manifest.verifiedELF(relativeTo: image)) != nil else { return nil }
+            return manifest
+        }.value
+    }
+
+    private var startupTask: Task<Void, Never>?
+    private var startupID: UUID?
+
     public func startSession() {
+        guard startupTask == nil, !isSessionStarting, !isRunning else { return }
+        errorMessage = nil
+        isFirmwareReady = false
+        isBridgeReady = false
+        notificationTestStatus = nil
+        notificationTestSucceeded = false
+        let id = UUID()
+        startupID = id
+        isSessionStarting = true
+        statusMessage = "Checking firmware and starting Renode…"
+        startupTask = Task { [weak self] in
+            await self?.startSessionAfterVerification()
+            if self?.startupID == id {
+                self?.startupTask = nil
+                self?.startupID = nil
+                if self?.processManager.process == nil { self?.isSessionStarting = false }
+            }
+        }
+    }
+
+    private func startSessionAfterVerification() async {
+        guard !Task.isCancelled else { return }
         guard let renodePath = RenodeProcessManager.findRenodeExecutable(customPath: customRenodePath) else {
-            self.errorMessage = "Renode executable not found. Please install Renode in /Applications or configure its path in Settings."
+            self.errorMessage = "Renode executable not found. Install Renode or choose its executable in Configure Workbench."
             self.statusMessage = "Renode missing"
             return
         }
         
-        guard let appBinURL = assets[.appFirmware]?.fileURL ?? customAppBinURL ?? ResourceLoader.url(forResource: "app.signed", withExtension: "bin") else {
-            self.errorMessage = "Missing firmware app.signed.bin"
-            self.statusMessage = "Missing Firmware"
-            return
+        let workspace = customWorkspaceURL ?? Self.discoverWorkspaceRoot()
+        if customWorkspaceURL == nil { customWorkspaceURL = workspace }
+        let builtApp = workspace?.appendingPathComponent("build/renode-app/app.signed.bin")
+        let builtBootloader = workspace?.appendingPathComponent("build/renode-app/mcuboot.elf")
+        let requestedApp = assets[.appFirmware]?.isCustom == true ? assets[.appFirmware]?.fileURL : nil
+        let requestedBootloader = assets[.bootloader]?.isCustom == true ? assets[.bootloader]?.fileURL : nil
+        let usesWorkspaceBuild = requestedApp == nil || requestedApp?.standardizedFileURL == builtApp?.standardizedFileURL
+        let appBinURL: URL
+        let bootloaderURL: URL?
+        verifiedBuildManifest = nil
+        hasVerifiedFirmwareForAudit = false
+        auditGPIOPins()
+        if usesWorkspaceBuild {
+            guard let builtApp, let builtBootloader,
+                  let manifest = await Self.verifyFirmware(image: builtApp, bootloader: builtBootloader) else {
+                guard !Task.isCancelled else { return }
+                self.errorMessage = nil
+                self.statusMessage = "Firmware is not built yet. Choose Configure & Validate or Build & Run to continue."
+                return
+            }
+            guard !Task.isCancelled else { return }
+            if let requestedBootloader, requestedBootloader.standardizedFileURL != builtBootloader.standardizedFileURL {
+                self.errorMessage = "Selected MCUboot does not match the workspace application manifest. Use Build & Run or select a matching pair."
+                self.statusMessage = "Firmware verification required"
+                return
+            }
+            appBinURL = builtApp
+            bootloaderURL = builtBootloader
+            verifiedBuildManifest = manifest
+            hasVerifiedFirmwareForAudit = true
+            auditGPIOPins()
+
+        } else {
+            guard let requestedApp, let requestedBootloader else {
+                self.errorMessage = "Custom application firmware must be paired with an explicitly selected MCUboot image."
+                self.statusMessage = "Firmware pair required"
+                return
+            }
+            appBinURL = requestedApp
+            bootloaderURL = requestedBootloader
+            if let manifest = await Self.verifyFirmware(image: requestedApp, bootloader: requestedBootloader) {
+                guard !Task.isCancelled else { return }
+                verifiedBuildManifest = manifest
+                hasVerifiedFirmwareForAudit = true
+                auditGPIOPins()
+            }
         }
-        
-        let bootloaderURL = assets[.bootloader]?.fileURL ?? customBootloaderURL ?? ResourceLoader.url(forResource: "mcuboot", withExtension: "elf")
+        guard !Task.isCancelled else { return }
         let ssd1306CsURL = ResourceLoader.url(forResource: "F91SSD1306", withExtension: "cs")
         let pcbURL = assets[.pcb]?.fileURL ?? customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
         let rescURL = (assets[.rescScript]?.isCustom == true ? assets[.rescScript]?.fileURL : nil) ?? customRescURL
+        if let rescURL, (assets[.rescScript]?.isCustom == true || customRescURL != nil) {
+            guard let approvedRescSHA256,
+                  (try? FirmwareBuildManifest.digest(rescURL)) == approvedRescSHA256,
+                  (try? RenodeProcessManager.referenceEvidence(
+                    in: String(contentsOf: rescURL, encoding: .utf8),
+                    relativeTo: rescURL.deletingLastPathComponent()
+                  )) == approvedRescReferences else {
+                reviewRescScript(url: rescURL)
+                statusMessage = "Review the custom Renode script before execution"
+                return
+            }
+        }
         
         if let pcb = pcbURL {
             self.activePCBURL = pcb
@@ -694,7 +942,11 @@ public final class EmulatorSession: ObservableObject {
                 bootloaderURL: bootloaderURL,
                 ssd1306CsURL: ssd1306CsURL,
                 renodePath: renodePath,
-                customRescURL: rescURL
+                customRescURL: rescURL,
+                approvedRescSHA256: approvedRescSHA256,
+                approvedRescReferences: approvedRescReferences,
+                expectedAppSHA256: verifiedBuildManifest?.imageSHA256,
+                expectedBootloaderSHA256: verifiedBuildManifest?.mcubootSHA256
             )
             
             processManager.onOutputReceived = { [weak self] str in
@@ -705,7 +957,7 @@ public final class EmulatorSession: ObservableObject {
             
             processManager.onTerminated = { [weak self] status in
                 Task { @MainActor [weak self] in
-                    guard let self = self, self.isRunning else { return }
+                    guard let self = self else { return }
                     self.stopSession()
                     self.statusMessage = "Renode Exited (Code \(status))"
                 }
@@ -713,21 +965,94 @@ public final class EmulatorSession: ObservableObject {
             
             if let workDir = processManager.workDir {
                 self.framePpmURL = workDir.appendingPathComponent("screen.ppm")
+                activeRunID = UUID()
+                activeRunProvenance = processManager.stagedAssetSHA256
+                if let scriptDigest = processManager.preLaunchRescSHA256 {
+                    activeRunProvenance["resc.executedSHA256"] = scriptDigest
+                }
+                if let pcbURL {
+                    activeRunProvenance["pcb"] = try FirmwareBuildManifest.digest(pcbURL)
+                }
+                activeRunProvenance["app.sourcePath"] = appBinURL.path
+                if let bootloaderURL { activeRunProvenance["mcuboot.sourcePath"] = bootloaderURL.path }
+                if let rescURL { activeRunProvenance["resc.sourcePath"] = rescURL.path }
+                activeRunProvenance["firmwarePairVerification"] = verifiedBuildManifest == nil ? "not verified as a matching build pair" : "verified against firmware-manifest.json"
+                if let verifiedBuildManifest {
+                    activeRunProvenance["firmware.sourceRevision"] = verifiedBuildManifest.sourceRevision
+                    activeRunProvenance["firmware.sourceDirty"] = verifiedBuildManifest.sourceDirty ? "true" : "false"
+                    activeRunProvenance["firmware.configSHA256"] = verifiedBuildManifest.configSHA256
+                    activeRunProvenance["firmware.board"] = verifiedBuildManifest.board
+                }
+                activeRunProvenance["renodeExecutableSHA256"] = try FirmwareBuildManifest.digest(URL(fileURLWithPath: renodePath))
+                guard let stagedApp = processManager.stagedAssetURLs["app"],
+                      try FirmwareBuildManifest.digest(stagedApp) == activeRunProvenance["app"],
+                      try FirmwareBuildManifest.digest(appBinURL) == activeRunProvenance["app"] else {
+                    throw HarnessError.failure("Firmware changed while Renode was staging it; discarded this run.")
+                }
+                if let bootloaderURL {
+                    guard let stagedBootloader = processManager.stagedAssetURLs["mcuboot"],
+                          try FirmwareBuildManifest.digest(stagedBootloader) == activeRunProvenance["mcuboot"],
+                          try FirmwareBuildManifest.digest(bootloaderURL) == activeRunProvenance["mcuboot"] else {
+                        throw HarnessError.failure("MCUboot changed while Renode was staging it; discarded this run.")
+                    }
+                }
+                if let expectedBootHash = verifiedBuildManifest?.mcubootSHA256 {
+                    guard activeRunProvenance["mcuboot"] == expectedBootHash else {
+                        throw HarnessError.failure("Staged MCUboot no longer matches the app firmware manifest.")
+                    }
+                }
+                try processManager.preLaunchEvidence?()
+                let referenceData = try JSONEncoder().encode(processManager.rescReferenceEvidence)
+                let references = (try JSONSerialization.jsonObject(with: referenceData)) as? [[String: Any]] ?? []
+                var record: [String: Any] = ["runID": activeRunID!.uuidString,
+                                             "createdAt": ISO8601DateFormatter().string(from: Date()),
+                                             "assets": activeRunProvenance,
+                                             "rescReferences": references,
+                                             "renodeExecutable": renodePath]
+                if let manifest = verifiedBuildManifest {
+                    record["firmwareManifest"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(manifest))
+                }
+                let evidenceDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("F91Jepler/RunEvidence/\(activeRunID!.uuidString)")
+                try FileManager.default.createDirectory(at: evidenceDirectory, withIntermediateDirectories: true)
+                for (key, stagedURL) in processManager.stagedAssetURLs {
+                    let evidenceAssetURL = evidenceDirectory.appendingPathComponent(stagedURL.lastPathComponent)
+                    try? FileManager.default.removeItem(at: evidenceAssetURL)
+                    try FileManager.default.copyItem(at: stagedURL, to: evidenceAssetURL)
+                    activeRunProvenance["evidencePath.\(key)"] = stagedURL.lastPathComponent
+                }
+                record["assets"] = activeRunProvenance
+                record["stagedPaths"] = processManager.stagedAssetURLs.mapValues { $0.lastPathComponent }
+                let data = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+                try data.write(to: workDir.appendingPathComponent("run-manifest.json"), options: .atomic)
+                let evidenceURL = evidenceDirectory.appendingPathComponent("run-manifest.json")
+                try data.write(to: evidenceURL, options: .atomic)
+                activeRunManifestURL = evidenceURL
             }
             
-            self.statusMessage = "Connecting socket (Port \(port)..."
+            self.statusMessage = "Firmware verified; connecting to Renode (port \(port))…"
             
+            let connectingRunID = activeRunID
             socketClient.onConnected = { [weak self] in
                 Task { @MainActor in
-                    guard let self = self else { return }
+                    guard let self = self, self.activeRunID == connectingRunID,
+                          self.processManager.process?.isRunning == true else { return }
                     self.isRunning = true
+                    self.isSessionStarting = false
                     self.statusMessage = "Renode Connected & Running"
                     self.setupInitialCommands()
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 15_000_000_000)
+                        guard let self, self.activeRunID == connectingRunID, self.isRunning,
+                              !self.isFirmwareReady else { return }
+                        self.errorMessage = "Renode connected, but firmware startup was not observed. Check the UART log or rebuild the firmware."
+                    }
                 }
             }
             
             socketClient.onError = { [weak self] err in
                 Task { @MainActor in
+                    self?.stopSession()
                     self?.errorMessage = err
                     self?.statusMessage = "Socket Error"
                 }
@@ -742,6 +1067,15 @@ public final class EmulatorSession: ObservableObject {
             // Connect monitor socket
             self.socketClient.connect(port: port)
             
+            logStore.clear(tab: 0)
+            logStore.onUartLine = { [weak self] line in
+                guard let self else { return }
+                if line == "Watch screen ready" {
+                    self.isFirmwareReady = true
+                    self.statusMessage = "Firmware ready"
+                }
+                if line == "[TEST] READY v1" { self.isBridgeReady = true }
+            }
             // Start background polling for UART logs
             if let uartFile = self.processManager.uartLogURL {
                 self.logStore.startBackgroundUartTail(fileURL: uartFile)
@@ -758,6 +1092,7 @@ public final class EmulatorSession: ObservableObject {
             }
             
         } catch {
+            stopSession()
             self.errorMessage = "Failed to launch Renode: \(error.localizedDescription)"
             self.statusMessage = "Launch Error"
         }
@@ -820,6 +1155,8 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func rebootMachine() {
+        isFirmwareReady = false
+        isBridgeReady = false
         self.logStore.appendRenodeConsole(text: "[HOST] Machine cold reboot requested\n")
         socketClient.send(command: "mach")
         socketClient.send(command: "machine Reset")
@@ -857,6 +1194,7 @@ public final class EmulatorSession: ObservableObject {
         let hex = bytes.isEmpty ? "-" : bytes.map { String(format: "%02x", $0) }.joined()
         // Only generated numeric IDs, fixed field names and hex bytes enter the monitor command.
         socketClient.send(command: "sysbus.uart0 WriteLine \"F91TEST \(id) \(field) \(hex)\"")
+        socketClient.send(command: "sysbus.uart0 WriteChar 10")
         if let milliseconds = simulatedMS {
             socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(milliseconds) / 1000))
         }
@@ -871,17 +1209,39 @@ public final class EmulatorSession: ObservableObject {
             }
             try await Task.sleep(nanoseconds: 40_000_000)
         }
-        throw HarnessError.failure("No firmware ACK for \(field). Rebuild with CONFIG_F91_TEST_HARNESS=y; the loaded image may not support the bridge.")
+        throw HarnessError.failure("No firmware ACK for \(field). Check the build output and rebuild with CONFIG_F91_TEST_BRIDGE=y; the image may not include the emulator-only UART test bridge.")
     }
 
     private func inject(service: String, summary: String, hex: String, fields: [(String, [UInt8])]) {
+        guard isRunning else {
+            let detail = "Start Renode before sending a test request."
+            gattLogs.insert(GATTLogEntry(service: service, summary: detail, hexData: hex, status: "Not sent"), at: 0)
+            if service == "Notification handlers via UART" {
+                notificationTestSucceeded = false
+                notificationTestStatus = detail
+            }
+            return
+        }
+        guard isBridgeReady else {
+            notificationTestStatus = "The firmware test bridge is not ready. Wait for startup or rebuild the firmware."
+            return
+        }
         guard !injectionBusy, !isSequenceRunning, !isBootTestRunning else {
-            gattLogs.insert(GATTLogEntry(service: service, summary: "Harness busy", hexData: hex, status: "Not sent"), at: 0)
+            let detail = "Test harness is busy; wait for the current request to finish."
+            gattLogs.insert(GATTLogEntry(service: service, summary: detail, hexData: hex, status: "Not sent"), at: 0)
+            if service == "Notification handlers via UART" {
+                notificationTestSucceeded = false
+                notificationTestStatus = detail
+            }
             return
         }
         injectionBusy = true
+        isHarnessBusy = true
         Task { @MainActor in
-            defer { injectionBusy = false }
+            defer {
+                injectionBusy = false
+                isHarnessBusy = false
+            }
             var completed = 0
             do {
                 for (field, bytes) in fields {
@@ -889,16 +1249,26 @@ public final class EmulatorSession: ObservableObject {
                     completed += 1
                 }
                 gattLogs.insert(GATTLogEntry(service: service, summary: summary, hexData: hex, status: "Firmware ACK"), at: 0)
+                if service == "Notification handlers via UART" {
+                    notificationTestSucceeded = true
+                    notificationTestStatus = "Firmware handlers acknowledged all fields via the UART mock. This does not test BLE/ATT or radio delivery."
+                }
                 logStore.appendRenodeConsole(text: "[HOST] UART harness: firmware acknowledged \(service)\n")
             } catch {
                 let detail = "\(error.localizedDescription) (\(completed)/\(fields.count) fields applied; no rollback)"
                 gattLogs.insert(GATTLogEntry(service: service, summary: detail, hexData: hex, status: "Failed"), at: 0)
+                if service == "Notification handlers via UART" {
+                    notificationTestSucceeded = false
+                    notificationTestStatus = "Notification test failed: \(detail)"
+                }
                 logStore.appendRenodeConsole(text: "[HOST] UART harness failed: \(detail)\n")
             }
         }
     }
 
     public func injectNotification(payload: NotificationPayload) {
+        notificationTestStatus = "Sending sample to firmware handlers over the emulator UART test bridge…"
+        notificationTestSucceeded = false
         inject(service: "Notification handlers via UART", summary: "\(payload.title): \(payload.message)", hex: payload.hexSummary,
                fields: [("bar", payload.serializeNotificationBar()), ("call", payload.serializeIncomingCall()), ("text", payload.serializeIncomingText())])
     }
@@ -932,7 +1302,11 @@ public final class EmulatorSession: ObservableObject {
     }
 
     public func runBootSanityCheck() {
-        guard isRunning, !isBootTestRunning, !isSequenceRunning, !injectionBusy else { return }
+        guard !isBootTestRunning, !isSequenceRunning, !injectionBusy else { return }
+        guard isRunning else {
+            bootCheckOverallResult = "Start Renode first. Use Build & Run, then retry this check."
+            return
+        }
         isBootTestRunning = true
         bootCheckOverallResult = nil
         lastTestArtifactURL = nil
@@ -993,13 +1367,13 @@ public final class EmulatorSession: ObservableObject {
                     socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(max(1, step.holdDurationMs)) / 1000))
                     let held = try await harnessRequest("state", simulatedMS: 50)
                     let expected = 1 << ((Int(step.button.rawValue) ?? 1) - 1)
-                    guard FirmwareHarnessProtocol.buttonMask(in: held) == expected else {
+                    guard FirmwareHarnessProtocol.buttonMask(in: held, id: nextHarnessID) == expected else {
                         throw HarnessError.failure("Step \(index + 1): expected held button mask \(expected); firmware reported a different state")
                     }
                     buttonUp(key: step.button.rawValue)
                     socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(max(1, step.pauseAfterMs)) / 1000))
                     let released = try await harnessRequest("state", simulatedMS: 50)
-                    guard FirmwareHarnessProtocol.buttonMask(in: released) == 0 else {
+                    guard FirmwareHarnessProtocol.buttonMask(in: released, id: nextHarnessID) == 0 else {
                         throw HarnessError.failure("Step \(index + 1): firmware did not observe all buttons released")
                     }
                 }
@@ -1021,12 +1395,40 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func stopSession() {
+        startupTask?.cancel()
+        startupTask = nil
+        startupID = nil
+        isSessionStarting = false
         cancelSequence()
+        if activeRunID != nil,
+           let evidenceURL = activeRunManifestURL,
+           let uartLogURL = processManager.uartLogURL,
+           FileManager.default.fileExists(atPath: uartLogURL.path) {
+            let evidenceDirectory = evidenceURL.deletingLastPathComponent()
+            let evidenceLog = evidenceDirectory.appendingPathComponent("uart.log")
+            try? FileManager.default.removeItem(at: evidenceLog)
+            try? FileManager.default.copyItem(at: uartLogURL, to: evidenceLog)
+            if var record = (try? Data(contentsOf: evidenceURL))
+                .flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) {
+                if let runID = activeRunID { record["runID"] = runID.uuidString }
+                record["finishedAt"] = ISO8601DateFormatter().string(from: Date())
+                record["uartEvidence"] = "uart.log (captured when session stopped)"
+                if let data = try? JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys]) {
+                    try? data.write(to: evidenceURL, options: .atomic)
+                }
+            }
+        }
+        logStore.onUartLine = nil
+        isFirmwareReady = false
+        isBridgeReady = false
         logStore.stopBackgroundUartTail()
         displayStore.stopPolling()
         uartSocketClient.disconnect()
         socketClient.disconnect()
         processManager.stop()
+        activeRunID = nil
+        activeRunManifestURL = nil
+        activeRunProvenance = [:]
         isRunning = false
         statusMessage = "Stopped"
     }

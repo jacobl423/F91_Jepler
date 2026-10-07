@@ -8,15 +8,28 @@ public final class DisplayStreamStore: ObservableObject {
     
     @Published public var oledImage: CGImage? = nil
     @Published public var displayMetrics = DisplayMetrics()
-    @Published public var oledTheme: OLEDTheme = .white
+    @Published public var oledTheme: OLEDTheme = .white {
+        didSet { userDefaults.set(oledTheme.rawValue, forKey: "workbench.oledTheme") }
+    }
+    private let userDefaults: UserDefaults
     @Published public var showPixelGridMesh: Bool = true
     
     private var lastFrameTimes: [Double] = []
     private var frameTimer: Timer?
     private let decodeQueue = DispatchQueue(label: "org.jepler.framedecode", qos: .userInteractive)
     private var isDecodingFrame = false
+    private var pollingGeneration = UUID()
+    private var lastFrameData: Data?
+    private var sampleCount: UInt64 = 0
+    private var latestLitCount = 0
+    private var lastMetricsUpdate: Double = 0
     
-    public init() {}
+    public init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        if let raw = userDefaults.string(forKey: "workbench.oledTheme"), let theme = OLEDTheme(rawValue: raw) {
+            oledTheme = theme
+        }
+    }
     
     deinit {
         frameTimer?.invalidate()
@@ -39,8 +52,14 @@ public final class DisplayStreamStore: ObservableObject {
     public func stopPolling() {
         frameTimer?.invalidate()
         frameTimer = nil
+        pollingGeneration = UUID()
+        isDecodingFrame = false
+        lastFrameData = nil
+        oledImage = nil
+        sampleCount = 0
+        lastMetricsUpdate = 0
         lastFrameTimes.removeAll()
-        displayMetrics.fps = 0
+        displayMetrics = DisplayMetrics()
     }
     
     private func scheduleFrameIngestion(ppmURL: URL) {
@@ -48,29 +67,43 @@ public final class DisplayStreamStore: ObservableObject {
         isDecodingFrame = true
         
         let startTime = CFAbsoluteTimeGetCurrent()
+        let generation = pollingGeneration
+        let previousData = lastFrameData
         decodeQueue.async { [weak self] in
             guard let self = self else { return }
             guard let data = try? Data(contentsOf: ppmURL) else {
-                DispatchQueue.main.async { self.isDecodingFrame = false }
+                DispatchQueue.main.async {
+                    if self.pollingGeneration == generation { self.isDecodingFrame = false }
+                }
                 return
             }
             
-            let result = Self.decodePPMFast(data: data)
+            let changed = data != previousData
+            let result = changed ? Self.decodePPMFast(data: data) : nil
             let latencyMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
             
             DispatchQueue.main.async {
+                guard self.pollingGeneration == generation else { return }
                 self.isDecodingFrame = false
-                guard let (cgImg, litCount) = result else { return }
-                
-                self.oledImage = cgImg
-                self.displayMetrics.frameCount += 1
-                self.displayMetrics.litPixelCount = litCount
-                self.displayMetrics.lastFrameLatencyMs = latencyMs
-                
+                if changed {
+                    guard let (cgImg, litCount) = result else { return }
+                    self.latestLitCount = litCount
+                    self.lastFrameData = data
+                    self.oledImage = cgImg
+                }
+                self.sampleCount += 1
                 let now = CFAbsoluteTimeGetCurrent()
                 self.lastFrameTimes.append(now)
                 self.lastFrameTimes.removeAll { now - $0 > 1.0 }
-                self.displayMetrics.fps = Double(self.lastFrameTimes.count)
+                if now - self.lastMetricsUpdate >= 1 {
+                    var metrics = self.displayMetrics
+                    metrics.frameCount = self.sampleCount
+                    metrics.litPixelCount = self.latestLitCount
+                    metrics.lastFrameLatencyMs = latencyMs
+                    metrics.fps = Double(self.lastFrameTimes.count)
+                    self.displayMetrics = metrics
+                    self.lastMetricsUpdate = now
+                }
             }
         }
     }

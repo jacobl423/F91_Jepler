@@ -11,13 +11,7 @@ public struct ContentView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // MARK: 1. Top Header Bar with Simulation Controls & Tab Selector
-            AppTopBarView(session: session, firmwareBuild: firmwareBuild)
-            
-            Divider()
-            
-            // MARK: 2. 3-Pane Horizontal Split View
-            HSplitView {
+            WorkbenchSplitView(session: session) {
                 WorkbenchSidebar(title: "Project", edge: .leading,
                                  isExpanded: $session.isSidebarVisible) {
                     ProjectSidebarView(session: session)
@@ -26,13 +20,16 @@ public struct ContentView: View {
                        idealWidth: session.isSidebarVisible ? session.sidebarWidth : 60,
                        maxWidth: session.isSidebarVisible ? 396 : 60)
 
+            } center: {
                 // Center Pane: Fluid Dynamic Emulation Workbench
                 VStack(spacing: 0) {
+                    setupFlowCard
                     workbenchPanel
                 }
                 .frame(minWidth: 320, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
                 
+            } trailing: {
                 WorkbenchSidebar(title: "Terminal", edge: .trailing,
                                  isExpanded: $session.isTerminalVisible) {
                     TerminalView(session: session)
@@ -65,14 +62,98 @@ public struct ContentView: View {
         .focusedSceneObject(session)
         .focusedSceneObject(session.logStore)
         .focusedSceneObject(session.cpuInspector)
-        // MARK: 4. Window Toolbar Controls
+        .background(WindowStateRestorer())
         .toolbar {
-            // Workbench Configuration Sheet Button
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { session.showSetupSheet = true }) {
-                    Label("Configure Workbench", systemImage: "gearshape")
+            ToolbarItem(placement: .navigation) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Jepler Dev")
+                        .font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(session.isFirmwareReady ? Color.green : Color.secondary)
+                            .frame(width: 6, height: 6)
+                        Text(session.runtimeLabel)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .help("Configure Workbench")
+                .fixedSize()
+                .help(session.statusMessage)
+                .padding(.trailing, 16)
+            }
+            ToolbarItem(placement: .automatic) {
+                Menu {
+                    Picker("Workspace", selection: $session.selectedViewMode) {
+                        ForEach(ViewMode.allCases) { mode in
+                            Label(mode.rawValue, systemImage: mode.iconName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: session.selectedViewMode.iconName)
+                            .foregroundStyle(.secondary)
+                        Text(session.selectedViewMode.rawValue)
+                            .fontWeight(.medium)
+                    }
+                    .fixedSize()
+                }
+                .nativeToolbarControl()
+                .help("Choose workspace · ⌘1–⌘7")
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.flexible, placement: .automatic)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { firmwareBuild.buildAndRun(session: session) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "hammer")
+                        Text(firmwareBuild.isBuilding ? "Building…" : "Build & Run")
+                    }.fixedSize()
+                }
+                .nativeToolbarControl()
+                .disabled(firmwareBuild.isBuilding || session.isSessionStarting)
+                .help(firmwareBuild.status)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    if session.isRunning { session.stopSession() } else { session.startSession() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: session.isRunning ? "stop.fill" : "play.fill")
+                        Text(session.isRunning ? "Stop" : "Start")
+                    }.fixedSize()
+                }
+                .nativeToolbarControl()
+                .disabled(firmwareBuild.isBuilding || session.isSessionStarting)
+                Button { session.rebootMachine() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("Reboot")
+                    }.fixedSize()
+                }
+                .nativeToolbarControl()
+                .disabled(!session.isRunning || session.isHarnessBusy || session.isBootTestRunning || session.isSequenceRunning || firmwareBuild.isBuilding)
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Configure Workbench", systemImage: "gearshape") { session.showSetupSheet = true }
+                    if let logURL = firmwareBuild.lastLogURL {
+                        Button("Open Build Log", systemImage: "doc.text") { NSWorkspace.shared.open(logURL) }
+                    }
+                    if firmwareBuild.isBuilding {
+                        Button("Cancel Build", systemImage: "xmark") { firmwareBuild.cancel() }
+                    }
+                    Divider()
+                    Text("Watch buttons: 1 = A · 2 = B · 3 = C")
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .menuIndicator(.hidden)
+                .help("Workbench settings and build options")
             }
         }
         // MARK: 5. Keyboard Shortcuts (Secondary ⌥⌘S and Tab ⌘1..⌘7)
@@ -95,7 +176,67 @@ public struct ContentView: View {
         )
         // MARK: 6. Hardware Setup Sheet
         .sheet(isPresented: $session.showSetupSheet) {
-            HardwareSetupView(session: session)
+            HardwareSetupView(session: session) {
+                firmwareBuild.buildAndRun(session: session)
+            }
+        }
+        .sheet(isPresented: $session.isRescReviewPresented) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Review Renode Script Before Execution")
+                    .font(.headline)
+                Text("SHA-256: \(session.rescReviewSHA256 ?? "Unavailable")")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text(".resc scripts execute Renode monitor commands and are executable input. The script bytes below will be executed unchanged. Review every referenced resource before running.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !session.rescReviewReferenceEvidence.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Referenced resources")
+                            .font(.caption.weight(.semibold))
+                        ForEach(session.rescReviewReferenceEvidence) { evidence in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(evidence.reference)
+                                    .font(.system(.caption2, design: .monospaced))
+                                Text(evidence.resolvedPath ?? "Not resolved")
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(evidence.resolvedPath == nil ? .red : .secondary)
+                                if let digest = evidence.sha256 {
+                                    Text("SHA-256 \(digest)")
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let nestedScript = evidence.content {
+                                    ScrollView {
+                                        Text(nestedScript)
+                                            .font(.system(.caption2, design: .monospaced))
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .frame(maxHeight: 140)
+                                    .padding(5)
+                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 5))
+                                }
+                            }
+                        }
+                    }
+                }
+                ScrollView {
+                    Text(session.rescReviewText)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack {
+                    Button("Cancel") { session.isRescReviewPresented = false }
+                    Spacer()
+                    Button("I Reviewed This Script · Run") { session.approveReviewedRescScript() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(session.rescReviewSHA256 == nil)
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 650, minHeight: 500)
         }
         // MARK: 7. Dual Persistence Key Sync & Lifecycle
         .onChange(of: session.isSidebarVisible) { visible in
@@ -112,6 +253,105 @@ public struct ContentView: View {
         }
     }
     
+    private var setupFlowCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: session.isFirmwareReady ? "checkmark.circle.fill" : "info.circle")
+                    .foregroundStyle(session.isFirmwareReady ? .green : Color.secondary)
+                Text(session.isRunning || session.isSessionStarting ? session.runtimeLabel : "Start your watch")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if firmwareBuild.isBuilding || session.isSessionStarting {
+                    ProgressView().controlSize(.small)
+                }
+            }
+
+            if firmwareBuild.isBuilding {
+                Text(firmwareBuild.status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                ProgressView()
+                DisclosureGroup("Recent build output") {
+                    ScrollView {
+                        Text(firmwareBuild.output.suffix(2400))
+                            .font(.system(size: 9, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 110)
+                }
+                .font(.system(size: 10))
+            } else if session.isSessionStarting {
+                Text(session.statusMessage).font(.caption).foregroundStyle(.secondary)
+            } else if !session.isRunning {
+                if let error = session.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    let buildFailed = firmwareBuild.status.hasPrefix("Build failed") || firmwareBuild.status.hasPrefix("Build verification failed")
+                    let sessionNeedsSetup = session.statusMessage == "Firmware is not built yet. Choose Configure & Validate or Build & Run to continue."
+                    Text(buildFailed ? firmwareBuild.status : (sessionNeedsSetup ? session.statusMessage : (firmwareBuild.status == "Build the current workspace firmware" ? "1. Configure your project folder  ·  2. Build & Run  ·  3. Send a sample notification" : firmwareBuild.status)))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if !firmwareBuild.output.isEmpty {
+                    DisclosureGroup("Recent build output") {
+                        ScrollView {
+                            Text(firmwareBuild.output.suffix(2400))
+                                .font(.system(size: 9, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 110)
+                    }
+                    .font(.system(size: 10))
+                }
+                HStack(spacing: 8) {
+                    Button(session.errorMessage == nil ? "Configure & Validate" : "Fix Setup") {
+                        session.showSetupSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                    Button(firmwareBuild.status.hasPrefix("Build failed") || firmwareBuild.status.hasPrefix("Build verification failed") ? "Retry Build & Run" : "Build & Run") {
+                        firmwareBuild.buildAndRun(session: session)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(firmwareBuild.isBuilding || session.isSessionStarting)
+                    if firmwareBuild.lastLogURL != nil {
+                        Button("Open Build Log") { openBuildLog() }
+                            .buttonStyle(.link)
+                    }
+                }
+            } else {
+                HStack {
+                    Text(session.isBridgeReady ? "Buttons: 1 = A · 2 = B · 3 = C" : "Waiting for firmware startup. See Terminal for details.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Test notification") {
+                        session.injectNotification(payload: NotificationPayload())
+                        session.selectedViewMode = .gatt
+                    }
+                    .disabled(!session.canSendTestRequest)
+                    .help("Sends a sample through the emulator’s UART test bridge.")
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) { Divider() }
+        .onChange(of: session.isRunning) { running in
+            if running { firmwareBuild.sessionDidStart() }
+        }
+    }
+
+    private func openBuildLog() {
+        if let url = firmwareBuild.lastLogURL { NSWorkspace.shared.open(url) }
+    }
+
     // MARK: - Workbench Panel View Mode Router
     @ViewBuilder
     private var workbenchPanel: some View {
@@ -126,8 +366,10 @@ public struct ContentView: View {
             GATTTestInjectorView(session: session)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .test:
-            AutomatedTestRunnerView(session: session)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            AutomatedTestRunnerView(session: session) {
+                firmwareBuild.buildAndRun(session: session)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .pcb:
             KiCadPcbView(session: session)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -202,7 +444,7 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
                 // Draggable Splitter Bar with macOS resize cursor
                 ZStack {
                     Rectangle()
-                        .fill(Color(white: 0.16))
+                        .fill(Color.clear)
                         .frame(height: 7)
                     
                     Capsule()
@@ -251,142 +493,5 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
             }
             .coordinateSpace(name: "workbenchSplit")
         }
-    }
-}
-
-public struct AppTopBarView: View {
-    @ObservedObject var session: EmulatorSession
-    @ObservedObject var firmwareBuild: FirmwareBuildController
-    
-    public init(session: EmulatorSession, firmwareBuild: FirmwareBuildController) {
-        self.session = session
-        self.firmwareBuild = firmwareBuild
-    }
-    
-    public var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 10) {
-                // MARK: Leading Section: Sidebar Toggle & App Branding
-                HStack(spacing: 8) {
-                    Text("Jepler Dev")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(session.isRunning ? Color.green : Color.red)
-                            .frame(width: 7, height: 7)
-                        Text(session.statusMessage)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .frame(maxWidth: 220, alignment: .leading)
-                    }
-                }
-                .padding(.leading, 10)
-            
-                Divider().frame(height: 18)
-            
-                // MARK: Build and simulation controls
-                HStack(spacing: 6) {
-                    Button(action: { firmwareBuild.buildAndRun(session: session) }) {
-                        Label(firmwareBuild.isBuilding ? "Building…" : "Build & Run", systemImage: "hammer")
-                    }
-                    .disabled(firmwareBuild.isBuilding)
-                    .help(firmwareBuild.status)
-                    Button(action: {
-                        if session.isRunning {
-                            session.stopSession()
-                        } else {
-                            session.startSession()
-                        }
-                    }) {
-                        Label(session.isRunning ? "Stop" : "Start", systemImage: session.isRunning ? "square.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(session.isRunning ? .red : .green)
-                    .controlSize(.small)
-                
-                    Button(action: { session.rebootMachine() }) {
-                        Label("Reboot", systemImage: "arrow.counterclockwise")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(!session.isRunning)
-                }
-            
-                Divider().frame(height: 18)
-            
-                Spacer(minLength: 0)
-
-                // Hotkeys & Settings
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        KeyLegendBadge(key: "1", label: "Light")
-                        KeyLegendBadge(key: "2", label: "Mode")
-                        KeyLegendBadge(key: "3", label: "Toggle")
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .workbenchGlass(cornerRadius: 10)
-                
-                    Button(action: { session.showSetupSheet = true }) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Configure Workbench")
-                }
-                .padding(.trailing, 12)
-            }
-            HStack(spacing: 8) {
-                Text(firmwareBuild.status)
-                    .font(.system(size: 10, design: .monospaced))
-                    .lineLimit(1)
-                    .textSelection(.enabled)
-                if let logURL = firmwareBuild.lastLogURL {
-                    Button("Build Log") { NSWorkspace.shared.open(logURL) }
-                        .font(.system(size: 10))
-                }
-                if firmwareBuild.isBuilding {
-                    Button("Cancel Build") { firmwareBuild.cancel() }
-                        .font(.system(size: 10))
-                }
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 10)
-            // MARK: Resizable Horizontal Tab Bar (Workbench Modes)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(Array(ViewMode.allCases.enumerated()), id: \.element.id) { index, mode in
-                        Button(action: { session.selectedViewMode = mode }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: mode.iconName)
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text(mode.rawValue)
-                                    .font(.system(size: 11, weight: session.selectedViewMode == mode ? .bold : .medium))
-                            }
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .foregroundStyle(session.selectedViewMode == mode ? Color.accentColor : Color.primary)
-                            .workbenchGlass(cornerRadius: 12,
-                                            tint: session.selectedViewMode == mode ? .accentColor.opacity(0.2) : nil,
-                                            interactive: true)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Switch to \(mode.rawValue) (⌘\(index + 1))")
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            .frame(maxWidth: .infinity)
-            
-            .padding(.horizontal, 10)
-        }
-        .padding(.vertical, 4)
-        .workbenchGlass(cornerRadius: 12)
-        .padding(4)
     }
 }

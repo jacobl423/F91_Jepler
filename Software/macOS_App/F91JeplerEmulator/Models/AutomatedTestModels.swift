@@ -65,8 +65,8 @@ public struct SequencePreset: Identifiable {
     public static var defaultPresets: [SequencePreset] {
         return [
             SequencePreset(
-                name: "Mode Cycle (B → B → B)",
-                description: "Cycles through watch modes (Time → Alarm → Stopwatch → Time)",
+                name: "Repeated Button B Hold Test",
+                description: "Verifies button B held and released GPIO states; does not validate watch modes.",
                 steps: [
                     ButtonSequenceStep(button: .b, holdDurationMs: 150, pauseAfterMs: 300),
                     ButtonSequenceStep(button: .b, holdDurationMs: 150, pauseAfterMs: 300),
@@ -74,8 +74,8 @@ public struct SequencePreset: Identifiable {
                 ]
             ),
             SequencePreset(
-                name: "12 / 24-Hour Toggle (C → B → C)",
-                description: "Toggles 24-hour mode and verifies screen redraw",
+                name: "Button C / B / C Hold Test",
+                description: "Verifies button C, B, and C held/released GPIO states; does not assert clock-format behavior.",
                 steps: [
                     ButtonSequenceStep(button: .c, holdDurationMs: 150, pauseAfterMs: 300),
                     ButtonSequenceStep(button: .b, holdDurationMs: 150, pauseAfterMs: 300),

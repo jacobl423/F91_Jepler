@@ -24,12 +24,16 @@ public struct GATTTestInjectorView: View {
                     WrappingToolbar {
                         Image(systemName: "bell.badge.fill")
                             .foregroundColor(.blue)
-                        Text("Notification GATT Service Injector")
+                        Text("Send a notification")
                             .font(.system(size: 13, weight: .bold))
                         Spacer()
-                        Text("UUID: fa35a2f0-7989-11eb-9439-0242ac130002")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.secondary)
+                        DisclosureGroup("Protocol details") {
+                            Text("UART test bridge only — not BLE/ATT or radio. Service UUID: fa35a2f0-7989-11eb-9439-0242ac130002")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .font(.system(size: 10))
                     }
                     
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
@@ -72,10 +76,7 @@ public struct GATTTestInjectorView: View {
                     
                     // Hex Serialization Preview
                     let notifPayload = makeNotificationPayload()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("GATT Characteristic Payload Preview:")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
+                    DisclosureGroup("Payload bytes") {
                         Text(notifPayload.hexSummary)
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(Color(red: 0.3, green: 0.8, blue: 0.9))
@@ -84,14 +85,21 @@ public struct GATTTestInjectorView: View {
                             .background(Color.black.opacity(0.3))
                             .cornerRadius(4)
                     }
+                    .font(.system(size: 10))
                     
+                    if let testStatus = session.notificationTestStatus {
+                        Label(testStatus, systemImage: session.notificationTestSucceeded ? "checkmark.circle.fill" : (testStatus.localizedCaseInsensitiveContains("failed") ? "xmark.circle.fill" : "info.circle"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(session.notificationTestSucceeded ? .green : (testStatus.localizedCaseInsensitiveContains("failed") ? .red : .secondary))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     HStack {
                         Spacer()
                         Button(action: sendNotification) {
-                            Label("Send Notification Payload", systemImage: "paperplane.fill")
+                            Label("Send Test Notification", systemImage: "paperplane.fill")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!session.isRunning)
+                        .disabled(!session.canSendTestRequest)
                     }
                 }
                 .padding(14)
@@ -102,31 +110,35 @@ public struct GATTTestInjectorView: View {
                     WrappingToolbar {
                         Image(systemName: "clock.badge.checkmark.fill")
                             .foregroundColor(.orange)
-                        Text("Clock Sync GATT Service Injector")
+                        Text("Set the watch clock")
                             .font(.system(size: 13, weight: .bold))
                         Spacer()
-                        Text("UUID: fa35b2f0-7989-11eb-9439-0242ac130002")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.secondary)
+                        DisclosureGroup("Protocol details") {
+                            Text("UART test bridge only — not BLE/ATT or radio. Service UUID: fa35b2f0-7989-11eb-9439-0242ac130002")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .font(.system(size: 10))
                     }
                     
                     let clockPayload = ClockSyncPayload(is24Hour: is24HourClock)
                     
                     WrappingToolbar(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Current Host Epoch:")
+                            Text("Current Local Time:")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
-                            Text("\(clockPayload.timestamp) s")
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            Text(Date(timeIntervalSince1970: TimeInterval(clockPayload.timestamp)), style: .time)
+                                .font(.system(size: 12, weight: .bold))
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Timezone Offset:")
+                            Text("Timezone:")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
-                            Text("\(clockPayload.timezoneOffsetMinutes) min (\(TimeZone.current.identifier))")
-                                .font(.system(size: 11, design: .monospaced))
+                            Text(TimeZone.current.localizedName(for: .standard, locale: .current) ?? "Local time")
+                                .font(.system(size: 11))
                         }
                         
                         Toggle("24-Hour Mode", isOn: $is24HourClock)
@@ -136,18 +148,15 @@ public struct GATTTestInjectorView: View {
                         Spacer()
                         
                         Button(action: sendClockSync) {
-                            Label("Sync macOS Epoch & Clock", systemImage: "arrow.triangle.2.circlepath")
+                            Label("Sync with Mac", systemImage: "arrow.triangle.2.circlepath")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
-                        .disabled(!session.isRunning)
+                        .disabled(!session.canSendTestRequest)
                     }
                     
                     // Hex Preview
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("GATT Payload Preview:")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
+                    DisclosureGroup("Payload bytes") {
                         Text(clockPayload.hexSummary)
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(Color(red: 0.9, green: 0.7, blue: 0.3))
@@ -156,6 +165,7 @@ public struct GATTTestInjectorView: View {
                             .background(Color.black.opacity(0.3))
                             .cornerRadius(4)
                     }
+                    .font(.system(size: 10))
                 }
                 .padding(14)
                 .workbenchGlass(cornerRadius: 18)
@@ -165,10 +175,10 @@ public struct GATTTestInjectorView: View {
                     WrappingToolbar {
                         Image(systemName: "battery.100.bolt")
                             .foregroundColor(.green)
-                        Text("Virtual Battery & ADC Telemetry")
+                        Text("Battery simulation")
                             .font(.system(size: 13, weight: .bold))
                         Spacer()
-                        Text("Zephyr BAS (0x180F) / SAADC Channel")
+                        Text("Mock test state only · no BAS service or ADC")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
@@ -217,29 +227,33 @@ public struct GATTTestInjectorView: View {
                                     Text(String(format: "%.2f V", batteryVoltage))
                                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 }
-                                Slider(value: $batteryVoltage, in: 3.0...4.2, step: 0.05) { _ in
+                                Slider(value: $batteryVoltage, in: 3.0...4.2, step: 0.05) { editing in
+                                    guard !editing else { return }
                                     // Scale percentage to voltage
                                     batteryPct = min(100.0, max(0.0, (batteryVoltage - 3.2) / (4.2 - 3.2) * 100.0))
                                     sendBatteryUpdate()
                                 }
+                                .disabled(!session.canSendTestRequest)
                             }
                             
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
-                                    Text("State of Charge (BAS 0x2A19):")
+                                    Text("Mock state-of-charge value:")
                                         .font(.system(size: 11, weight: .medium))
                                     Spacer()
                                     Text("\(Int(batteryPct)) %")
                                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 }
-                                Slider(value: $batteryPct, in: 0...100, step: 1) { _ in
+                                Slider(value: $batteryPct, in: 0...100, step: 1) { editing in
+                                    guard !editing else { return }
                                     batteryVoltage = 3.2 + (batteryPct / 100.0) * 1.0
                                     sendBatteryUpdate()
                                 }
+                                .disabled(!session.canSendTestRequest)
                             }
                         }
                     }
-                    
+
                     HStack {
                         Spacer()
                         Button("Mock 10% Low Battery Warning") {
@@ -248,6 +262,7 @@ public struct GATTTestInjectorView: View {
                             sendBatteryUpdate()
                         }
                         .font(.system(size: 10))
+                        .disabled(!session.canSendTestRequest)
                         
                         Button("Mock 100% Full Charge") {
                             batteryPct = 100.0
@@ -255,15 +270,16 @@ public struct GATTTestInjectorView: View {
                             sendBatteryUpdate()
                         }
                         .font(.system(size: 10))
+                        .disabled(!session.canSendTestRequest)
                     }
                 }
                 .padding(14)
                 .workbenchGlass(cornerRadius: 18)
                 
-                // Section 4: GATT Transmission History Log
+                // Section 4: UART Test-Bridge Request History
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Recent GATT Injections (\(session.gattLogs.count))")
+                        Text("Recent requests (\(session.gattLogs.count))")
                             .font(.system(size: 12, weight: .bold))
                         Spacer()
                         Button("Clear") { session.gattLogs.removeAll() }
@@ -271,7 +287,7 @@ public struct GATTTestInjectorView: View {
                     }
                     
                     if session.gattLogs.isEmpty {
-                        Text("No GATT injections performed yet. Use controls above to test payloads.")
+                        Text("No UART test-bridge requests yet. This does not exercise BLE, ATT, pairing, or radio transport.")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                             .padding(.vertical, 8)
@@ -287,14 +303,18 @@ public struct GATTTestInjectorView: View {
                                             Text(entry.summary)
                                                 .font(.system(size: 10, weight: .medium))
                                         }
-                                        Text(entry.hexData)
-                                            .font(.system(size: 9, design: .monospaced))
-                                            .foregroundColor(.secondary)
+                                        DisclosureGroup("Payload bytes") {
+                                            Text(entry.hexData)
+                                                .font(.system(size: 9, design: .monospaced))
+                                                .foregroundColor(.secondary)
+                                                .textSelection(.enabled)
+                                        }
+                                        .font(.system(size: 9))
                                     }
                                     Spacer()
                                     Text(entry.status)
                                         .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.green)
+                                        .foregroundColor(entry.status == "Firmware ACK" ? .green : .orange)
                                 }
                                 .padding(6)
                                 .background(Color(NSColor.windowBackgroundColor))

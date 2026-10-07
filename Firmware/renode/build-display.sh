@@ -22,10 +22,24 @@ PY
 )
 .venv/bin/python -m west build -b nrf52840dk/nrf52840 -d build/renode-app Firmware/zephyr -- \
     -DZEPHYR_MODULES="$modules" -DEXTRA_CONF_FILE="$root/Firmware/renode/test-bridge.conf" -DEXTRA_DTC_OVERLAY_FILE="$root/Firmware/renode/display.overlay"
+
+# Build an explicit, matching MCUboot image: plain west build above builds only
+# the application, not MCUboot. Keep its output in our ignored Renode build tree.
+mkdir -p build/renode-app/mcuboot
+.venv/bin/python -m west build -b nrf52840dk/nrf52840 -d build/renode-app/mcuboot "$root/bootloader/mcuboot/boot/zephyr" -- \
+    -DZEPHYR_MODULES="$modules" \
+    -DEXTRA_CONF_FILE="$root/Firmware/zephyr/child_image/mcuboot.conf;$root/bootloader/mcuboot/samples/zephyr/overlay-rsa.conf" \
+    -Dmcuboot_CONFIG_BOOT_VALIDATE_SLOT0=y \
+    -Dmcuboot_CONFIG_BOOT_SIGNATURE_TYPE_RSA=y \
+    -Dmcuboot_CONFIG_BOOT_SIGNATURE_TYPE_RSA_LEN=2048 \
+    -Dmcuboot_CONFIG_BOOT_IMAGE_NUMBER=1
 .venv/bin/python bootloader/mcuboot/scripts/imgtool.py sign \
     -k bootloader/mcuboot/root-rsa-2048.pem --header-size 0x200 --align 4 \
     --version 1.0.0 --slot-size 0x76000 --max-sectors 256 \
     build/renode-app/zephyr/zephyr.bin build/renode-app/app.signed.bin
+# Stage the matching generated MCUboot ELF and publish the app image/manifest atomically.
+[[ -s build/renode-app/mcuboot/zephyr/zephyr.elf ]] || { echo 'MCUboot build produced no ELF' >&2; exit 1; }
+cp build/renode-app/mcuboot/zephyr/zephyr.elf build/renode-app/mcuboot.elf
 # Generate viewer bindings from the same devicetree used by the firmware.
 PYTHONPATH="$root/zephyr/scripts/dts/python-devicetree/src" .venv/bin/python - <<'PY'
 import json, pickle

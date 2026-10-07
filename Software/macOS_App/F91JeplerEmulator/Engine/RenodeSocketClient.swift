@@ -13,6 +13,7 @@ public final class RenodeSocketClient {
     private var retryTimer: Timer?
     private var targetPort: UInt16 = 0
     private var attempts = 0
+    private var generation = UUID()
     
     public init() {}
     
@@ -24,14 +25,14 @@ public final class RenodeSocketClient {
     }
     
     private func tryConnect() {
-        guard !isConnected else { return }
+        guard !isConnected, targetPort != 0 else { return }
         attempts += 1
         
         let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(integerLiteral: targetPort))
         let nwConnection = NWConnection(to: endpoint, using: .tcp)
         
         nwConnection.stateUpdateHandler = { [weak self] state in
-            guard let self = self else { return }
+            guard let self = self, self.connection === nwConnection else { return }
             switch state {
             case .ready:
                 self.isConnected = true
@@ -57,10 +58,12 @@ public final class RenodeSocketClient {
     }
     
     private func scheduleRetry(error: String) {
-        guard !isConnected else { return }
+        guard !isConnected, targetPort != 0 else { return }
+        let attemptGeneration = generation
         if attempts < 30 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.tryConnect()
+                guard let self, self.generation == attemptGeneration else { return }
+                self.tryConnect()
             }
         } else {
             DispatchQueue.main.async { [weak self] in
@@ -88,8 +91,9 @@ public final class RenodeSocketClient {
     }
     
     private func receiveNext() {
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self = self else { return }
+        guard let receivingConnection = connection else { return }
+        receivingConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self, self.connection === receivingConnection else { return }
             
             if let data = data, !data.isEmpty {
                 let cleaned = self.cleanTelnetData(data)
@@ -102,6 +106,10 @@ public final class RenodeSocketClient {
             
             if isComplete || error != nil {
                 self.isConnected = false
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.connection === receivingConnection else { return }
+                    self.onError?("Renode connection closed. Start the emulator again.")
+                }
                 return
             }
             self.receiveNext()
@@ -150,6 +158,8 @@ public final class RenodeSocketClient {
     }
     
     public func disconnect() {
+        generation = UUID()
+        targetPort = 0
         retryTimer?.invalidate()
         retryTimer = nil
         isConnected = false

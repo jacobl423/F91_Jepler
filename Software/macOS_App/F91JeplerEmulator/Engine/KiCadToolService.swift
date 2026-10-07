@@ -42,12 +42,23 @@ public struct KiCadDRCViolation: Identifiable, Equatable {
     }
 }
 
+public enum ValidationConfidence: String, Codable {
+    case pass
+    case fail
+    case inconclusive
+    case advisory
+}
+
 public struct KiCadDRCReport: Identifiable, Equatable {
     public let id = UUID()
     public let timestamp: Date
     public let sourceFile: String
+    public let sourceSHA256: String
+    public let toolVersion: String
+    public let exitCode: Int32
     public let violations: [KiCadDRCViolation]
     public let unconnected: [KiCadDRCViolation]
+    public let schemaIsKnown: Bool
     
     public var errorCount: Int {
         violations.filter { $0.severity == "error" }.count
@@ -59,8 +70,9 @@ public struct KiCadDRCReport: Identifiable, Equatable {
         unconnected.count
     }
     public var isClean: Bool {
-        errorCount == 0 && unconnectedCount == 0
+        exitCode == 0 && errorCount == 0 && unconnectedCount == 0
     }
+    public var confidence: ValidationConfidence { exitCode == 0 ? (isClean ? .pass : .fail) : .inconclusive }
 }
 
 public final class KiCadToolService {
@@ -140,6 +152,22 @@ public final class KiCadToolService {
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
     
+    private func version(of cli: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: cli)
+        process.arguments = ["version"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0, !output.isEmpty else {
+            throw NSError(domain: "KiCadToolService", code: 11, userInfo: [NSLocalizedDescriptionKey: "Could not establish KiCad CLI version; validation result cannot be trusted."])
+        }
+        return output
+    }
+
     // MARK: - 3D Raytrace Render
     
     public func render3D(pcbURL: URL, outputURL: URL, width: Int = 1000, height: Int = 1000) async throws -> NSImage {
@@ -186,13 +214,22 @@ public final class KiCadToolService {
         let tempJson = FileManager.default.temporaryDirectory.appendingPathComponent("kicad_drc_\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tempJson) }
         
+        let inputDigest = try FirmwareBuildManifest.digest(pcbURL)
+        let toolVersion = try version(of: cli)
+        let snapshotURL = FileManager.default.temporaryDirectory.appendingPathComponent("kicad_drc_input_\(UUID().uuidString).kicad_pcb")
+        try FileManager.default.copyItem(at: pcbURL, to: snapshotURL)
+        defer { try? FileManager.default.removeItem(at: snapshotURL) }
+        guard try FirmwareBuildManifest.digest(snapshotURL) == inputDigest else {
+            throw NSError(domain: "KiCadToolService", code: 7, userInfo: [NSLocalizedDescriptionKey: "PCB changed while preparing the DRC snapshot; run again."])
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cli)
         process.arguments = [
             "pcb", "drc",
             "--format", "json",
             "--output", tempJson.path,
-            pcbURL.path
+            snapshotURL.path
         ]
         
         let pipe = Pipe()
@@ -202,6 +239,13 @@ public final class KiCadToolService {
         try process.run()
         process.waitUntilExit()
         
+        guard process.terminationStatus == 0 else {
+            let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "No DRC output"
+            throw NSError(domain: "KiCadToolService", code: 8, userInfo: [NSLocalizedDescriptionKey: "KiCad DRC exited \(process.terminationStatus): \(output)"])
+        }
+        guard try FirmwareBuildManifest.digest(snapshotURL) == inputDigest else {
+            throw NSError(domain: "KiCadToolService", code: 9, userInfo: [NSLocalizedDescriptionKey: "PCB snapshot changed while KiCad DRC was running; result is inconclusive."])
+        }
         guard FileManager.default.fileExists(atPath: tempJson.path),
               let data = try? Data(contentsOf: tempJson) else {
             let outData = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -209,10 +253,16 @@ public final class KiCadToolService {
             throw NSError(domain: "KiCadToolService", code: 4, userInfo: [NSLocalizedDescriptionKey: "DRC execution error: \(output)"])
         }
         
-        return try parseDRCJson(data: data, sourceFile: pcbURL.lastPathComponent)
+        let report = try parseDRCJson(data: data, sourceFile: pcbURL.lastPathComponent,
+                                      sourceSHA256: inputDigest, toolVersion: toolVersion, exitCode: process.terminationStatus)
+        guard report.schemaIsKnown else {
+            throw NSError(domain: "KiCadToolService", code: 12, userInfo: [NSLocalizedDescriptionKey: "DRC JSON schema/version is unsupported; result is inconclusive."])
+        }
+        return report
     }
     
-    private func parseDRCJson(data: Data, sourceFile: String) throws -> KiCadDRCReport {
+    private func parseDRCJson(data: Data, sourceFile: String, sourceSHA256: String,
+                               toolVersion: String, exitCode: Int32) throws -> KiCadDRCReport {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw NSError(domain: "KiCadToolService", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid DRC JSON"])
         }
@@ -241,14 +291,20 @@ public final class KiCadToolService {
             }
         }
         
-        let rawViolations = root["violations"] as? [[String: Any]] ?? []
-        let rawUnconnected = root["unconnected_items"] as? [[String: Any]] ?? []
+        guard let rawViolations = root["violations"] as? [[String: Any]],
+              let rawUnconnected = root["unconnected_items"] as? [[String: Any]] else {
+            throw NSError(domain: "KiCadToolService", code: 10, userInfo: [NSLocalizedDescriptionKey: "DRC JSON lacks required violations or unconnected_items arrays; result is inconclusive."])
+        }
         
         return KiCadDRCReport(
             timestamp: Date(),
             sourceFile: sourceFile,
+            sourceSHA256: sourceSHA256,
+            toolVersion: toolVersion,
+            exitCode: exitCode,
             violations: parseViolations(list: rawViolations),
-            unconnected: parseViolations(list: rawUnconnected)
+            unconnected: parseViolations(list: rawUnconnected),
+            schemaIsKnown: root["violations"] is [[String: Any]] && root["unconnected_items"] is [[String: Any]]
         )
     }
     
