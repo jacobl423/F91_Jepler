@@ -114,12 +114,12 @@ public struct KiCadPcbView: View {
             .background(.ultraThinMaterial)
             
             // GPIO Pin Audit Alert Banner (If KiCad nets changed vs emulator GPIOs)
-            if let audit = session.pinAuditResult, audit.hasMismatches {
+            if let audit = session.pinAuditResult, audit.hasMismatches || audit.hasUnknowns {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("KiCad Netlist / GPIO Pin Mismatch Detected")
+                        Text(audit.hasMismatches ? "PCB / Firmware Pin Mismatch" : "PCB / Firmware Pin Audit Incomplete")
                             .font(.system(size: 10.5, weight: .bold))
                             .foregroundColor(.orange)
                         Text(audit.entries.filter { !$0.isMatching }.map { "\($0.signalName): \($0.detectedPin) (expected \($0.expectedPin))" }.joined(separator: " • "))
@@ -127,12 +127,7 @@ public struct KiCadPcbView: View {
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    Button("Sync Renode Pins") {
-                        session.syncRenodeWithKiCadPins()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .font(.system(size: 10, weight: .bold))
+
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)

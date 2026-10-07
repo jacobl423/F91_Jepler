@@ -9,5 +9,6 @@ struct F91JeplerEmulatorApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
+        .commands { WorkbenchCommands() }
     }
 }

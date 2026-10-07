@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import UniformTypeIdentifiers
 import SwiftUI
 import Combine
 
@@ -82,6 +84,22 @@ public final class TerminalLogStore: ObservableObject {
         uartPollingTimer?.cancel()
     }
     
+    public func copyVisibleLogs() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(filteredLines.map(\.raw).joined(separator: "\n"), forType: .string)
+    }
+
+    public func exportVisibleLogs() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "f91_jepler_\(selectedTab == 0 ? "uart" : "renode")_log.txt"
+        let text = AnsiParser.stripAnsi(from: filteredLines.map(\.raw).joined(separator: "\n"))
+        if panel.runModal() == .OK, let url = panel.url {
+            do { try text.write(to: url, atomically: true, encoding: .utf8) }
+            catch { NSAlert(error: error).runModal() }
+        }
+    }
+
     // MARK: - Ingestion
     
     public func appendUart(text: String) {

@@ -36,4 +36,6 @@ int notification_service_init(const struct notification_service_cb *cbs);
 uint8_t notification_service_get_bar(void);
 void notification_service_set_bar(uint8_t val);
 
+int notification_service_write(const char *field, const void *buf, uint16_t len, uint16_t offset);
+
 #endif /* NOTIFICATION_SERVICE_H_ */

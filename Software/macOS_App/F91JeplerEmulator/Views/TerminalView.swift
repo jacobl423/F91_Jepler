@@ -54,7 +54,7 @@ public struct TerminalView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .background(Color.primary.opacity(0.06))
                     .cornerRadius(6)
                     .frame(width: 220)
                     
@@ -63,16 +63,14 @@ public struct TerminalView: View {
                         .font(.system(size: 10))
                     
                     Button(action: {
-                        let text = logStore.filteredLines.map(\.raw).joined(separator: "\n")
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
+                        logStore.copyVisibleLogs()
                     }) {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.borderless)
                     .font(.system(size: 11))
                     
-                    Button(action: exportLogs) {
+                    Button(action: { logStore.exportVisibleLogs() }) {
                         Label("Export", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.borderless)
@@ -99,7 +97,7 @@ public struct TerminalView: View {
                                 .font(.system(size: 9.5, weight: logStore.selectedCategory == cat ? .bold : .medium))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2.5)
-                                .background(logStore.selectedCategory == cat ? Color.accentColor : Color(NSColor.controlBackgroundColor))
+                                .background(logStore.selectedCategory == cat ? Color.accentColor : Color.primary.opacity(0.06))
                                 .foregroundColor(logStore.selectedCategory == cat ? .white : .primary)
                                 .cornerRadius(10)
                         }
@@ -113,13 +111,14 @@ public struct TerminalView: View {
                 }
             }
             .padding(8)
-            .background(.ultraThinMaterial)
+            .background(Color.clear)
             
             Divider()
             
             // High-Performance Incremental Console Terminal View with ANSI Color Pre-rendering
             ConsoleTerminalTextView(logStore: logStore)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(red: 0.05, green: 0.07, blue: 0.06).opacity(0.26))
             
             // Interactive Renode Monitor Command Bar (only visible when Renode Monitor is selected)
             if logStore.selectedTab == 1 {
@@ -175,12 +174,12 @@ public struct TerminalView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .background(Color.primary.opacity(0.06))
                     .cornerRadius(6)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
                 }
-                .background(.ultraThinMaterial)
+                .background(Color.clear)
             }
         }
     }
@@ -196,15 +195,7 @@ public struct TerminalView: View {
         session?.sendRenodeCommand(cmd)
     }
     
-    private func exportLogs() {
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = []
-        savePanel.nameFieldStringValue = "f91_jepler_\(logStore.selectedTab == 0 ? "uart" : "renode")_log.txt"
-        if savePanel.runModal() == .OK, let url = savePanel.url {
-            let clean = AnsiParser.stripAnsi(from: logStore.filteredLines.map(\.raw).joined(separator: "\n"))
-            try? clean.write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
+
 }
 
 public struct ConsoleTerminalTextView: NSViewRepresentable {
@@ -216,7 +207,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
     
     public func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        scrollView.drawsBackground = true
+        scrollView.drawsBackground = false
         scrollView.backgroundColor = NSColor(red: 0.05, green: 0.07, blue: 0.06, alpha: 1.0)
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -230,7 +221,7 @@ public struct ConsoleTerminalTextView: NSViewRepresentable {
         textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         textView.isRichText = true
         textView.importsGraphics = false
-        textView.drawsBackground = true
+        textView.drawsBackground = false
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]

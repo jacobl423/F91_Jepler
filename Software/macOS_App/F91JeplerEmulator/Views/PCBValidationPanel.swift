@@ -138,7 +138,7 @@ public struct PCBValidationPanel: View {
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     
                     if result.isReadyForFabrication {
-                        Text("FABRICATION READY")
+                        Text("HEURISTIC CHECKS PASS")
                             .font(.system(size: 8, weight: .bold))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -253,7 +253,7 @@ public struct PCBValidationPanel: View {
         guard let result = session.pcbValidationResult else { return }
         var md = "# PCB Validation Report: \(session.pcbBoard.filename)\n\n"
         md += "- **Overall Design Score:** \(result.scorePercentage)%\n"
-        md += "- **Fabrication Status:** \(result.isReadyForFabrication ? "Ready for Fabrication ✅" : "Draft / Unrouted ⚠️")\n"
+        md += "- **Heuristic Status:** \(result.isReadyForFabrication ? "Heuristic checks pass; fabrication review required" : "Draft / Unrouted ⚠️")\n"
         md += "- **Board Envelope:** \(String(format: "%.2f", session.pcbBoard.widthMm)) × \(String(format: "%.2f", session.pcbBoard.heightMm)) mm\n"
         md += "- **Date:** \(Date().formatted())\n"
         md += "- **Passed:** \(result.passCount) | **Warnings:** \(result.warningCount) | **Critical:** \(result.errorCount)\n\n"

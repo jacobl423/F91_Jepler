@@ -1,97 +1,66 @@
 import Foundation
 
+public enum PinAuditStatus: String, Equatable {
+    case verified, mismatch, unknown
+}
+
 public struct PinAuditEntry: Identifiable, Equatable {
     public let id = UUID()
-    public let signalName: String     // e.g. "Button A (Light)"
-    public let expectedPin: String    // e.g. "P0.11"
-    public let detectedPin: String    // e.g. "P0.11"
-    public let connectedNet: String   // e.g. "/BTN_LIGHT"
-    public let isMatching: Bool
+    public let signalName: String
+    public let expectedPin: String
+    public let detectedPin: String
+    public let connectedNet: String
+    public let status: PinAuditStatus
+    public var isMatching: Bool { status == .verified }
 }
 
 public struct GPIOPinAuditResult: Equatable {
     public let timestamp: Date
     public let entries: [PinAuditEntry]
-    public let hasMismatches: Bool
-    
-    public var mismatchCount: Int {
-        entries.filter { !$0.isMatching }.count
-    }
+    public var hasMismatches: Bool { mismatchCount > 0 }
+    public var hasUnknowns: Bool { unknownCount > 0 }
+    public var mismatchCount: Int { entries.filter { $0.status == .mismatch }.count }
+    public var unknownCount: Int { entries.filter { $0.status == .unknown }.count }
 }
 
 public final class GPIOPinAuditor {
-    public static func audit(board: KiCadBoard) -> GPIOPinAuditResult {
-        var entries: [PinAuditEntry] = []
-        
-        // 1. Audit Button A (Light)
-        let (btnANet, btnAPin) = findNetAndMcuPin(
-            board: board,
-            switchRefs: ["SWITCH1", "SW1", "S1", "SW_A", "BTN1", "BTN_LIGHT"],
-            altLabels: ["A/1", "LIGHT", "KEY1"]
-        )
-        let aPin = btnAPin ?? board.buttonAPin
-        entries.append(PinAuditEntry(
-            signalName: "Button A · Light",
-            expectedPin: board.buttonAPin,
-            detectedPin: aPin,
-            connectedNet: btnANet ?? "P0.11 (Active-Low)",
-            isMatching: aPin.uppercased() == board.buttonAPin.uppercased()
-        ))
-        
-        // 2. Audit Button B (Mode)
-        let (btnBNet, btnBPin) = findNetAndMcuPin(
-            board: board,
-            switchRefs: ["SWITCH2", "SW2", "S2", "SW_B", "BTN2", "BTN_MODE"],
-            altLabels: ["B/2", "MODE", "KEY2"]
-        )
-        let bPin = btnBPin ?? board.buttonBPin
-        entries.append(PinAuditEntry(
-            signalName: "Button B · Mode",
-            expectedPin: board.buttonBPin,
-            detectedPin: bPin,
-            connectedNet: btnBNet ?? "P0.12 (Active-Low)",
-            isMatching: bPin.uppercased() == board.buttonBPin.uppercased()
-        ))
-        
-        // 3. Audit Button C (Alarm / 24HR)
-        let (btnCNet, btnCPin) = findNetAndMcuPin(
-            board: board,
-            switchRefs: ["SWITCH3", "SW3", "S3", "SW_C", "BTN3", "BTN_ALARM", "BTN_TOGGLE"],
-            altLabels: ["C/3", "ALARM", "TOGGLE", "KEY3"]
-        )
-        let cPin = btnCPin ?? board.buttonCPin
-        entries.append(PinAuditEntry(
-            signalName: "Button C · Alarm/Toggle",
-            expectedPin: board.buttonCPin,
-            detectedPin: cPin,
-            connectedNet: btnCNet ?? "P0.24 (Active-Low)",
-            isMatching: cPin.uppercased() == board.buttonCPin.uppercased()
-        ))
-        
-        // 4. Audit OLED I2C SDA
-        let (sdaNet, sdaPin) = findI2CPin(board: board, isSDA: true)
-        entries.append(PinAuditEntry(
-            signalName: "OLED I2C · SDA",
-            expectedPin: "P0.26",
-            detectedPin: sdaPin ?? "P0.26",
-            connectedNet: sdaNet ?? "I2C_SDA (0x3C)",
-            isMatching: (sdaPin ?? "P0.26").uppercased() == "P0.26"
-        ))
-        
-        // 5. Audit OLED I2C SCL
-        let (sclNet, sclPin) = findI2CPin(board: board, isSDA: false)
-        entries.append(PinAuditEntry(
-            signalName: "OLED I2C · SCL",
-            expectedPin: "P0.27",
-            detectedPin: sclPin ?? "P0.27",
-            connectedNet: sclNet ?? "I2C_SCL (0x3C)",
-            isMatching: (sclPin ?? "P0.27").uppercased() == "P0.27"
-        ))
-        
-        let hasMismatches = entries.contains { !$0.isMatching }
-        return GPIOPinAuditResult(timestamp: Date(), entries: entries, hasMismatches: hasMismatches)
+    public static func audit(board: KiCadBoard, firmwareManifest: FirmwareBuildManifest? = nil) -> GPIOPinAuditResult {
+        return audit(board: board, expectedPins: firmwareManifest?.expectedPins ?? [:])
     }
-    
+
+    /// Expected values must come from the loaded firmware build, never PCB defaults.
+    public static func audit(board: KiCadBoard, expectedPins: [String: String]) -> GPIOPinAuditResult {
+        let specifications: [(String, String, [String], [String])] = [
+            ("buttonA", "Button A · Light", ["SWITCH1", "SW1", "S1", "SW_A", "BTN1", "BTN_LIGHT"], ["A/1", "LIGHT", "KEY1"]),
+            ("buttonB", "Button B · Mode", ["SWITCH2", "SW2", "S2", "SW_B", "BTN2", "BTN_MODE"], ["B/2", "MODE", "KEY2"]),
+            ("buttonC", "Button C · Alarm/Toggle", ["SWITCH3", "SW3", "S3", "SW_C", "BTN3", "BTN_ALARM", "BTN_TOGGLE"], ["C/3", "ALARM", "TOGGLE", "KEY3"])
+        ]
+        var entries = specifications.map { key, label, refs, labels in
+            let detected = findNetAndMcuPin(board: board, switchRefs: refs, altLabels: labels)
+            return entry(label, expectedPins[key], detected)
+        }
+        entries.append(entry("OLED I2C · SDA", expectedPins["sda"], findI2CPin(board: board, isSDA: true)))
+        entries.append(entry("OLED I2C · SCL", expectedPins["scl"], findI2CPin(board: board, isSDA: false)))
+        return GPIOPinAuditResult(timestamp: Date(), entries: entries)
+    }
+
+    private static func entry(_ name: String, _ expected: String?, _ detected: (netName: String?, pinName: String?)) -> PinAuditEntry {
+        let expectedPin = expected.flatMap(normalizedPin)
+        let actualPin = detected.pinName.flatMap(normalizedPin)
+        let status: PinAuditStatus
+        if let expectedPin, let actualPin { status = expectedPin == actualPin ? .verified : .mismatch }
+        else { status = .unknown }
+        return PinAuditEntry(signalName: name, expectedPin: expectedPin ?? "Unknown (firmware)",
+                             detectedPin: actualPin ?? "Unknown (PCB)", connectedNet: detected.netName ?? "Unknown net", status: status)
+    }
+
+    private static func normalizedPin(_ value: String) -> String? {
+        let pieces = value.uppercased().split(separator: ".")
+        guard pieces.count == 2, ["P0", "P1"].contains(String(pieces[0])),
+              let pin = Int(pieces[1]), (0...31).contains(pin) else { return nil }
+        return String(format: "%@.%02d", String(pieces[0]), pin)
+    }
+
     private static func findNetAndMcuPin(
         board: KiCadBoard,
         switchRefs: [String],
@@ -121,13 +90,9 @@ public final class GPIOPinAuditor {
         if let u1 = board.footprints.first(where: { $0.reference.uppercased() == "U1" }) {
             for pad in u1.pads {
                 if pad.netName.caseInsensitiveCompare(targetNet) == .orderedSame {
-                    let pinNum = pad.number
                     let pinFunc = pad.pinFunction ?? ""
-                    if pinFunc.uppercased().starts(with: "P0.") || pinFunc.uppercased().starts(with: "P1.") {
+                    if normalizedPin(pinFunc) != nil {
                         return (targetNet, pinFunc.uppercased())
-                    }
-                    if let mapped = mapNrfPinNumber(padNumber: pinNum) {
-                        return (targetNet, mapped)
                     }
                 }
             }
@@ -143,29 +108,15 @@ public final class GPIOPinAuditor {
             if u.contains(keyword) {
                 if let u1 = board.footprints.first(where: { $0.reference.uppercased() == "U1" }) {
                     for pad in u1.pads where pad.netName.caseInsensitiveCompare(net) == .orderedSame {
-                        if let pinFunc = pad.pinFunction, pinFunc.uppercased().starts(with: "P") {
+                        if let pinFunc = pad.pinFunction, normalizedPin(pinFunc) != nil {
                             return (net, pinFunc.uppercased())
-                        }
-                        if let mapped = mapNrfPinNumber(padNumber: pad.number) {
-                            return (net, mapped)
                         }
                     }
                 }
-                return (net, isSDA ? "P0.26" : "P0.27")
+                return (net, nil)
             }
         }
         return (nil, nil)
     }
     
-    private static func mapNrfPinNumber(padNumber: String) -> String? {
-        // Standard nRF52840 QFN73 / aQFN mapping fallback
-        let table: [String: String] = [
-            "H2": "P0.11",
-            "H3": "P0.12",
-            "J1": "P0.24",
-            "B4": "P0.26",
-            "C4": "P0.27"
-        ]
-        return table[padNumber.uppercased()]
-    }
 }
