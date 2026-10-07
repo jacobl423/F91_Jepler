@@ -3,6 +3,7 @@ import Foundation
 // MARK: - SessionPersistenceKeys
 
 public enum SessionPersistenceKeys {
+    public static let isTerminalVisible = "isTerminalVisible"
     public static let customPcbPath = "jepler.custom.pcb.path"
     public static let customAppBinPath = "jepler.custom.appBin.path"
     public static let customBootloaderPath = "jepler.custom.bootloader.path"

@@ -30,13 +30,13 @@ public struct ProjectSidebarView: View {
 
             // 2. Scrollable Asset Dropzone Cards
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     ForEach(SessionAssetKind.allCases) { kind in
                         SessionAssetCardView(kind: kind, session: session)
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
             }
             .background(Color.clear)
 
@@ -46,7 +46,6 @@ public struct ProjectSidebarView: View {
             SidebarFooterView(session: session)
         }
         .frame(minWidth: 230, idealWidth: session.sidebarWidth, maxWidth: 380)
-        .background(.ultraThinMaterial)
     }
 }
 
@@ -79,21 +78,11 @@ private struct SidebarHeaderView: View {
             .buttonStyle(.borderless)
             .help("Revert all 4 assets to embedded defaults")
 
-            // Collapse sidebar button
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    session.isSidebarVisible = false
-                }
-            }) {
-                Image(systemName: "sidebar.leading")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.borderless)
-            .help("Collapse Project Sidebar (⌘0 or ⌥⌘S)")
+
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
+
     }
 }
 
@@ -186,7 +175,7 @@ private struct SessionAssetCardView: View {
             HStack(spacing: 5) {
                 // Browse / Replace
                 CardActionButton(
-                    title: "Browse",
+                    title: nil,
                     icon: "folder",
                     tooltip: "Choose replacement file for \(kind.title)",
                     action: { browseFile() }
@@ -194,7 +183,7 @@ private struct SessionAssetCardView: View {
 
                 // In-Memory Reload
                 CardActionButton(
-                    title: "Reload",
+                    title: nil,
                     icon: "arrow.clockwise",
                     tooltip: "Reload file from disk in-memory",
                     action: { session.reloadAsset(kind: kind) }
@@ -203,7 +192,7 @@ private struct SessionAssetCardView: View {
 
                 // Revert to Default
                 CardActionButton(
-                    title: "Default",
+                    title: nil,
                     icon: "arrow.uturn.backward",
                     tooltip: "Revert to embedded default resource",
                     action: { session.revertAssetToDefault(kind: kind) }
@@ -223,7 +212,7 @@ private struct SessionAssetCardView: View {
             }
         }
         .padding(10)
-        .workbenchGlass(cornerRadius: 16)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(
@@ -594,13 +583,13 @@ private struct SidebarFooterView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
-                    .background(Color(NSColor.windowBackgroundColor))
+                    .background(Color.primary.opacity(0.04))
                     .cornerRadius(3)
                     .help("Toggle sidebar with ⌘0 or ⌥⌘S")
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(Color.clear)
     }
 }

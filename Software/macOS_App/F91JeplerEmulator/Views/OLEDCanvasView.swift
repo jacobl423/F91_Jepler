@@ -27,19 +27,19 @@ public struct OLEDCanvasView: View {
                     .font(.system(size: 11))
                 
                 
-                // Real-time FPS & Draw Call Metrics
+                // Host ingestion statistics; firmware draw calls are not measured.
                 WrappingToolbar(spacing: 12) {
                     HStack(spacing: 4) {
-                        Text("FPS:")
+                        Text("Host samples/s:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
                         Text(String(format: "%.1f", displayStore.displayMetrics.fps))
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(displayStore.displayMetrics.fps > 5 ? .green : .orange)
+                            .foregroundColor(.primary)
                     }
                     
                     HStack(spacing: 4) {
-                        Text("Frames:")
+                        Text("Samples:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
                         Text("\(displayStore.displayMetrics.frameCount)")
@@ -48,10 +48,10 @@ public struct OLEDCanvasView: View {
                     }
                     
                     HStack(spacing: 4) {
-                        Text("Draw Calls:")
+                        Text("Read/decode:")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text("\(displayStore.displayMetrics.drawCallCount)")
+                        Text(String(format: "%.1f ms", displayStore.displayMetrics.lastFrameLatencyMs))
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundColor(.primary)
                     }
@@ -73,6 +73,10 @@ public struct OLEDCanvasView: View {
             .padding(.horizontal, 10)
             .padding(.top, 6)
             
+            Text("96 × 39 visible pixels · firmware backing height: 40 rows · host samples may repeat")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+
             // OLED Canvas Frame
             ZStack {
                 // Background Glass

@@ -23,7 +23,7 @@
 #define BT_UUID_CLOCK_DST_CHAR BT_UUID_DECLARE_128(BT_UUID_CLOCK_DST_CHAR_VAL)
 
 typedef void (*clock_time_write_cb_t)(uint32_t timestamp);
-typedef void (*clock_timezone_write_cb_t)(uint16_t tz);
+typedef void (*clock_timezone_write_cb_t)(int16_t tz);
 typedef void (*clock_timemode_write_cb_t)(uint8_t mode);
 typedef void (*clock_dst_write_cb_t)(uint8_t dst);
 
@@ -39,13 +39,15 @@ int clock_service_init(const struct clock_service_cb *cbs);
 uint32_t clock_service_get_time(void);
 void clock_service_set_time(uint32_t time_sec);
 
-uint16_t clock_service_get_timezone(void);
-void clock_service_set_timezone(uint16_t tz);
+int16_t clock_service_get_timezone(void);
+void clock_service_set_timezone(int16_t tz);
 
 uint8_t clock_service_get_timemode(void);
 void clock_service_set_timemode(uint8_t mode);
 
 uint8_t clock_service_get_dst(void);
 void clock_service_set_dst(uint8_t dst);
+
+int clock_service_write(const char *field, const void *buf, uint16_t len, uint16_t offset);
 
 #endif /* CLOCK_SERVICE_H_ */

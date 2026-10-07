@@ -5,13 +5,13 @@ import CoreGraphics
 import AppKit
 
 public enum ViewMode: String, CaseIterable, Identifiable {
+    case split = "Workbench Split"
     case watch = "Watch Console"
     case canvas = "OLED Canvas"
-    case gatt = "GATT / BLE Harness"
+    case gatt = "Firmware Test Harness"
     case test = "Regression Tests"
     case pcb = "KiCad PCB"
     case gdb = "GDB / CPU"
-    case split = "Workbench Split"
     
     public var id: String { rawValue }
     
@@ -41,6 +41,12 @@ public final class EmulatorSession: ObservableObject {
         }
     }
     
+    @Published public var isTerminalVisible: Bool = true {
+        didSet {
+            userDefaults.set(isTerminalVisible, forKey: SessionPersistenceKeys.isTerminalVisible)
+        }
+    }
+
     @Published public var sidebarWidth: CGFloat = 280 {
         didSet {
             userDefaults.set(Double(sidebarWidth), forKey: SessionPersistenceKeys.sidebarWidth)
@@ -181,7 +187,6 @@ public final class EmulatorSession: ObservableObject {
     // Automated Regression & Fuzzing (Module E)
     @Published public var isBootTestRunning: Bool = false
     @Published public var bootCheckSteps: [BootCheckStep] = [
-        BootCheckStep(name: "1. Renode Machine Initialization", expectedString: "mach create"),
         BootCheckStep(name: "2. MCUboot Dual-Bank Chainloader", expectedString: "Booting MCUboot"),
         BootCheckStep(name: "3. Flash Slot Validation & Chainload", expectedString: "Jumping to the first image slot"),
         BootCheckStep(name: "4. Zephyr RTOS Kernel Boot", expectedString: "Booting Zephyr OS"),
@@ -238,6 +243,10 @@ public final class EmulatorSession: ObservableObject {
             self.isSidebarVisible = true
         }
         
+        if userDefaults.object(forKey: SessionPersistenceKeys.isTerminalVisible) != nil {
+            self.isTerminalVisible = userDefaults.bool(forKey: SessionPersistenceKeys.isTerminalVisible)
+        }
+
         // 2. Restore Sidebar Width
         let savedWidth = CGFloat(userDefaults.double(forKey: SessionPersistenceKeys.sidebarWidth))
         if savedWidth >= 230 && savedWidth <= 380 {
@@ -811,7 +820,7 @@ public final class EmulatorSession: ObservableObject {
     }
     
     public func rebootMachine() {
-        self.uartLogs += "\n--- MACHINE COLD REBOOT ---\n"
+        self.logStore.appendRenodeConsole(text: "[HOST] Machine cold reboot requested\n")
         socketClient.send(command: "mach")
         socketClient.send(command: "machine Reset")
         socketClient.send(command: "sysbus.gpioPortA OnGPIO 11 true")
@@ -822,131 +831,191 @@ public final class EmulatorSession: ObservableObject {
     
     // MARK: - GATT Test Injector & BLE Control Panel (Module D)
     
+    private var nextHarnessID: UInt32 = 0
+    private var injectionBusy = false
+    @Published public var lastTestArtifactURL: URL?
+
+    private func uartOffset() throws -> UInt64 {
+        guard let url = processManager.uartLogURL else { throw HarnessError.failure("UART file unavailable") }
+        return try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64 ?? 0
+    }
+
+    private func uartEvidence(since offset: UInt64) throws -> String {
+        guard let url = processManager.uartLogURL else { throw HarnessError.failure("UART file unavailable") }
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        try file.seek(toOffset: offset)
+        return String(decoding: try file.readToEnd() ?? Data(), as: UTF8.self)
+    }
+
+    private func harnessRequest(_ field: String, bytes: [UInt8] = [], simulatedMS: Int? = nil) async throws -> String {
+        guard isRunning, socketClient.isConnected else { throw HarnessError.failure("Start Renode before using the harness") }
+        try Task.checkCancellation()
+        nextHarnessID &+= 1
+        let id = nextHarnessID
+        let offset = try uartOffset()
+        let hex = bytes.isEmpty ? "-" : bytes.map { String(format: "%02x", $0) }.joined()
+        // Only generated numeric IDs, fixed field names and hex bytes enter the monitor command.
+        socketClient.send(command: "sysbus.uart0 WriteLine \"F91TEST \(id) \(field) \(hex)\"")
+        if let milliseconds = simulatedMS {
+            socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(milliseconds) / 1000))
+        }
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            guard isRunning else { throw HarnessError.failure("Session stopped") }
+            let evidence = try uartEvidence(since: offset)
+            if let result = FirmwareHarnessProtocol.acknowledgment(in: evidence, id: id, field: field) {
+                if result == "OK" { return evidence }
+                throw HarnessError.failure("Firmware rejected \(field): \(result)")
+            }
+            try await Task.sleep(nanoseconds: 40_000_000)
+        }
+        throw HarnessError.failure("No firmware ACK for \(field). Rebuild with CONFIG_F91_TEST_HARNESS=y; the loaded image may not support the bridge.")
+    }
+
+    private func inject(service: String, summary: String, hex: String, fields: [(String, [UInt8])]) {
+        guard !injectionBusy, !isSequenceRunning, !isBootTestRunning else {
+            gattLogs.insert(GATTLogEntry(service: service, summary: "Harness busy", hexData: hex, status: "Not sent"), at: 0)
+            return
+        }
+        injectionBusy = true
+        Task { @MainActor in
+            defer { injectionBusy = false }
+            var completed = 0
+            do {
+                for (field, bytes) in fields {
+                    _ = try await harnessRequest(field, bytes: bytes)
+                    completed += 1
+                }
+                gattLogs.insert(GATTLogEntry(service: service, summary: summary, hexData: hex, status: "Firmware ACK"), at: 0)
+                logStore.appendRenodeConsole(text: "[HOST] UART harness: firmware acknowledged \(service)\n")
+            } catch {
+                let detail = "\(error.localizedDescription) (\(completed)/\(fields.count) fields applied; no rollback)"
+                gattLogs.insert(GATTLogEntry(service: service, summary: detail, hexData: hex, status: "Failed"), at: 0)
+                logStore.appendRenodeConsole(text: "[HOST] UART harness failed: \(detail)\n")
+            }
+        }
+    }
+
     public func injectNotification(payload: NotificationPayload) {
-        let entry = GATTLogEntry(
-            service: "Notification (fa35a2f0)",
-            summary: "[\(payload.category.displayName)] \(payload.title): \(payload.message)",
-            hexData: payload.hexSummary
-        )
-        self.gattLogs.insert(entry, at: 0)
-        
-        // Log to UART terminal stream as simulated BLE packet event
-        let uartSim = "\n[BLE] Incoming notification payload -> Bar: 0x\(String(format: "%02x", payload.category.rawValue)) | Sender: \"\(payload.title)\" | Text: \"\(payload.message)\"\n"
-        self.uartLogs += uartSim
-        
-        // Send command to Renode to acknowledge simulated event
-        socketClient.send(command: "log \"[GATT-INJECT] Notification \(payload.category.displayName)\"")
+        inject(service: "Notification handlers via UART", summary: "\(payload.title): \(payload.message)", hex: payload.hexSummary,
+               fields: [("bar", payload.serializeNotificationBar()), ("call", payload.serializeIncomingCall()), ("text", payload.serializeIncomingText())])
     }
-    
+
     public func injectClockSync(payload: ClockSyncPayload) {
-        let entry = GATTLogEntry(
-            service: "Clock Sync (fa35b2f0)",
-            summary: "Epoch: \(payload.timestamp)s | TZ: \(payload.timezoneOffsetMinutes)m | 24H: \(payload.is24HourMode)",
-            hexData: payload.hexSummary
-        )
-        self.gattLogs.insert(entry, at: 0)
-        
-        let uartSim = "\n[BLE] Clock time set to epoch: \(payload.timestamp)\n[BLE] Clock timezone set to: \(payload.timezoneOffsetMinutes)\n[BLE] Clock timemode set to: \(payload.is24HourMode ? 1 : 0) (\(payload.is24HourMode ? "24-hr" : "12-hr"))\n"
-        self.uartLogs += uartSim
-        
-        socketClient.send(command: "log \"[GATT-INJECT] Clock Synced to \(payload.timestamp)\"")
+        inject(service: "Clock handlers via UART", summary: "Epoch \(payload.timestamp), UTC offset \(payload.timezoneOffsetMinutes) minutes", hex: payload.hexSummary,
+               fields: [("time", payload.serializeTime()), ("timezone", payload.serializeTimezone()), ("timemode", payload.serializeTimeMode()), ("dst", payload.serializeDST())])
     }
-    
+
     public func injectBatteryUpdate(payload: BatteryMockPayload) {
-        let entry = GATTLogEntry(
-            service: "Battery Service (0x180F)",
-            summary: "Level: \(payload.percentage)% | Voltage: \(String(format: "%.2f", payload.voltageVolts))V",
-            hexData: "BAS: [\(String(format: "%02X", payload.percentage))] ADC: [\(String(format: "%.2f", payload.voltageVolts))V]"
-        )
-        self.gattLogs.insert(entry, at: 0)
-        
-        let uartSim = "\n[BATTERY] Mock ADC reading: \(String(format: "%.2f", payload.voltageVolts))V, State-of-charge: \(payload.percentage)%\(payload.isLowBattery ? " [WARNING: LOW BATTERY]" : "")\n"
-        self.uartLogs += uartSim
+        guard payload.voltageVolts.isFinite, (2.0...5.0).contains(payload.voltageVolts) else { return }
+        let mv = UInt16((payload.voltageVolts * 1000).rounded())
+        inject(service: "Battery test state via UART", summary: "\(mv) mV (test state only; no ADC or BAS validation)", hex: String(format: "%04X", mv),
+               fields: [("battery", [UInt8(mv & 255), UInt8(mv >> 8)])])
     }
-    
-    // MARK: - Automated Regression & Fuzzing (Module E)
-    
+
+    private func saveFailure(_ detail: String, uart: String) {
+        do {
+            let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("F91Jepler/TestResults/\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try (detail + "\n\nUART evidence:\n" + uart + "\n\nMonitor:\n" + processOutputBuffer)
+                .write(to: directory.appendingPathComponent("failure.txt"), atomically: true, encoding: .utf8)
+            if let framePpmURL, FileManager.default.fileExists(atPath: framePpmURL.path) {
+                try FileManager.default.copyItem(at: framePpmURL, to: directory.appendingPathComponent("screen.ppm"))
+            }
+            lastTestArtifactURL = directory
+        } catch {
+            logStore.appendRenodeConsole(text: "[HOST] Could not save test artifacts: \(error.localizedDescription)\n")
+        }
+    }
+
     public func runBootSanityCheck() {
-        guard !isBootTestRunning else { return }
+        guard isRunning, !isBootTestRunning, !isSequenceRunning, !injectionBusy else { return }
         isBootTestRunning = true
         bootCheckOverallResult = nil
-        
-        for i in 0..<bootCheckSteps.count {
+        lastTestArtifactURL = nil
+        for i in bootCheckSteps.indices {
             bootCheckSteps[i].status = .pending
             bootCheckSteps[i].detail = ""
             bootCheckSteps[i].durationMs = 0
         }
-        
         Task { @MainActor in
-            let startTime = CFAbsoluteTimeGetCurrent()
-            rebootMachine()
-            
-            for i in 0..<self.bootCheckSteps.count {
-                self.bootCheckSteps[i].status = .running
-                let pattern = self.bootCheckSteps[i].expectedString
-                
-                var matched = false
-                let deadline = Date().addingTimeInterval(8.0)
-                
-                while Date() < deadline {
-                    if self.uartLogs.contains(pattern) || self.processOutputBuffer.contains(pattern) {
-                        matched = true
-                        break
+            defer { isBootTestRunning = false }
+            var offset: UInt64 = 0
+            do {
+                // Reading the file boundary excludes buffered UI lines and every prior boot.
+                offset = try uartOffset()
+                rebootMachine()
+                for i in bootCheckSteps.indices {
+                    bootCheckSteps[i].status = .running
+                    let started = Date()
+                    let pattern = bootCheckSteps[i].expectedString
+                    var matched = false
+                    while Date().timeIntervalSince(started) < 8, isRunning {
+                        if try uartEvidence(since: offset).contains(pattern) { matched = true; break }
+                        try await Task.sleep(nanoseconds: 100_000_000)
                     }
-                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    bootCheckSteps[i].durationMs = Int(Date().timeIntervalSince(started) * 1000)
+                    bootCheckSteps[i].status = matched ? .passed : .failed
+                    bootCheckSteps[i].detail = matched ? "Fresh firmware output: \(pattern)" : "Missing fresh firmware output: \(pattern)"
+                    if !matched { throw HarnessError.failure(bootCheckSteps[i].detail) }
                 }
-                
-                let stepElapsedMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
-                self.bootCheckSteps[i].durationMs = stepElapsedMs
-                
-                if matched {
-                    self.bootCheckSteps[i].status = .passed
-                    self.bootCheckSteps[i].detail = "Verified token: \"\(pattern)\""
-                } else {
-                    self.bootCheckSteps[i].status = .failed
-                    self.bootCheckSteps[i].detail = "Timeout waiting for token: \"\(pattern)\""
-                    self.bootCheckOverallResult = "FAILED: Check aborted at stage \(i + 1)"
-                    self.isBootTestRunning = false
-                    return
-                }
+                bootCheckOverallResult = "PASS: Fresh boot milestones observed. OTA rollback and RF are not tested."
+            } catch {
+                bootCheckOverallResult = "FAILED: \(error.localizedDescription)"
+                saveFailure(bootCheckOverallResult!, uart: (try? uartEvidence(since: offset)) ?? "Unavailable")
             }
-            
-            self.bootCheckOverallResult = "PASS: All 6 boot verification stages passed successfully!"
-            self.isBootTestRunning = false
         }
     }
-    
+
     public func runSequence(preset: SequencePreset) {
-        cancelSequence()
+        guard isRunning, !isBootTestRunning, !isSequenceRunning, !injectionBusy, !preset.steps.isEmpty else { return }
         isSequenceRunning = true
-        sequenceStatusMessage = "Running sequence: \(preset.name)..."
-        
+        lastTestArtifactURL = nil
+        sequenceStatusMessage = "Running: \(preset.name)"
         activeSequenceTask = Task { @MainActor in
-            for (idx, step) in preset.steps.enumerated() {
-                guard !Task.isCancelled else { break }
-                self.sequenceStatusMessage = "Step \(idx + 1)/\(preset.steps.count): Holding \(step.button.displayName) (\(step.holdDurationMs)ms)..."
-                
-                self.buttonDown(key: step.button.rawValue)
-                try? await Task.sleep(nanoseconds: UInt64(step.holdDurationMs) * 1_000_000)
-                self.buttonUp(key: step.button.rawValue)
-                
-                if step.pauseAfterMs > 0 {
-                    try? await Task.sleep(nanoseconds: UInt64(step.pauseAfterMs) * 1_000_000)
+            let offset = (try? uartOffset()) ?? 0
+            defer {
+                for key in Array(pressedKeys) { buttonUp(key: key) }
+                socketClient.send(command: "start")
+                isSequenceRunning = false
+                activeSequenceTask = nil
+            }
+            do {
+                _ = try await harnessRequest("ping")
+                socketClient.send(command: "pause")
+                for (index, step) in preset.steps.enumerated() {
+                    try Task.checkCancellation()
+                    sequenceStatusMessage = "Step \(index + 1)/\(preset.steps.count): \(step.button.displayName)"
+                    buttonDown(key: step.button.rawValue)
+                    socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(max(1, step.holdDurationMs)) / 1000))
+                    let held = try await harnessRequest("state", simulatedMS: 50)
+                    let expected = 1 << ((Int(step.button.rawValue) ?? 1) - 1)
+                    guard FirmwareHarnessProtocol.buttonMask(in: held) == expected else {
+                        throw HarnessError.failure("Step \(index + 1): expected held button mask \(expected); firmware reported a different state")
+                    }
+                    buttonUp(key: step.button.rawValue)
+                    socketClient.send(command: String(format: "emulation RunFor \"%.3f\"", Double(max(1, step.pauseAfterMs)) / 1000))
+                    let released = try await harnessRequest("state", simulatedMS: 50)
+                    guard FirmwareHarnessProtocol.buttonMask(in: released) == 0 else {
+                        throw HarnessError.failure("Step \(index + 1): firmware did not observe all buttons released")
+                    }
                 }
+                sequenceStatusMessage = "PASS: Every held/released GPIO state acknowledged by firmware."
+            } catch is CancellationError {
+                sequenceStatusMessage = "Cancelled; buttons released."
+            } catch {
+                sequenceStatusMessage = "FAILED: \(error.localizedDescription)"
+                saveFailure(sequenceStatusMessage, uart: (try? uartEvidence(since: offset)) ?? "Unavailable")
             }
-            
-            if !Task.isCancelled {
-                self.sequenceStatusMessage = "Sequence '\(preset.name)' finished successfully. Firmware responsive."
-            }
-            self.isSequenceRunning = false
         }
     }
-    
+
     public func cancelSequence() {
         activeSequenceTask?.cancel()
-        activeSequenceTask = nil
-        isSequenceRunning = false
-        for key in pressedKeys {
+        for key in Array(pressedKeys) {
             buttonUp(key: key)
         }
     }

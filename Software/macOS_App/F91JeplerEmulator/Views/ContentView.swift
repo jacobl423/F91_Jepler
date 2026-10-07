@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 public struct ContentView: View {
     @StateObject private var session = EmulatorSession()
+    @StateObject private var firmwareBuild = FirmwareBuildController()
     private let keyboardMonitor = KeyboardMonitor()
     
     public init() {}
@@ -11,23 +12,20 @@ public struct ContentView: View {
     public var body: some View {
         VStack(spacing: 0) {
             // MARK: 1. Top Header Bar with Simulation Controls & Tab Selector
-            AppTopBarView(session: session)
+            AppTopBarView(session: session, firmwareBuild: firmwareBuild)
             
             Divider()
             
             // MARK: 2. 3-Pane Horizontal Split View
             HSplitView {
-                // Leading Pane: Collapsible Project & Asset Upload Sidebar
-                if session.isSidebarVisible {
+                WorkbenchSidebar(title: "Project", edge: .leading,
+                                 isExpanded: $session.isSidebarVisible) {
                     ProjectSidebarView(session: session)
-                        .frame(minWidth: 230, idealWidth: session.sidebarWidth, maxWidth: 380)
-                        .layoutPriority(0)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
                 }
-                
+                .frame(minWidth: session.isSidebarVisible ? 246 : 60,
+                       idealWidth: session.isSidebarVisible ? session.sidebarWidth : 60,
+                       maxWidth: session.isSidebarVisible ? 396 : 60)
+
                 // Center Pane: Fluid Dynamic Emulation Workbench
                 VStack(spacing: 0) {
                     workbenchPanel
@@ -35,15 +33,17 @@ public struct ContentView: View {
                 .frame(minWidth: 320, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
                 
-                // Trailing Pane: Monospaced UART Terminal & Renode Monitor
-                VStack(spacing: 0) {
+                WorkbenchSidebar(title: "Terminal", edge: .trailing,
+                                 isExpanded: $session.isTerminalVisible) {
                     TerminalView(session: session)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(minWidth: 260, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(0)
+                .frame(minWidth: session.isTerminalVisible ? 276 : 60,
+                       idealWidth: session.isTerminalVisible ? 460 : 60,
+                       maxWidth: session.isTerminalVisible ? .infinity : 60)
+
             }
             .animation(.easeInOut(duration: 0.2), value: session.isSidebarVisible)
+            .animation(.easeInOut(duration: 0.2), value: session.isTerminalVisible)
             
             // MARK: 3. Error / Warning Banner
             if let err = session.errorMessage {
@@ -62,21 +62,11 @@ public struct ContentView: View {
             }
         }
         .background(WorkbenchBackdrop())
+        .focusedSceneObject(session)
+        .focusedSceneObject(session.logStore)
+        .focusedSceneObject(session.cpuInspector)
         // MARK: 4. Window Toolbar Controls
         .toolbar {
-            // Dedicated Sidebar Toggle Button in Leading Navigation Placement
-            ToolbarItem(placement: .navigation) {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        session.isSidebarVisible.toggle()
-                    }
-                }) {
-                    Label("Toggle Project Sidebar", systemImage: "sidebar.leading")
-                }
-                .keyboardShortcut("0", modifiers: .command)
-                .help("Toggle Project Sidebar (⌘0)")
-            }
-            
             // Workbench Configuration Sheet Button
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { session.showSetupSheet = true }) {
@@ -98,21 +88,7 @@ public struct ContentView: View {
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
                 
-                // Workbench Tab Switching Shortcuts: ⌘1 .. ⌘7
-                Button(action: { session.selectedViewMode = .watch }) { EmptyView() }
-                    .keyboardShortcut("1", modifiers: .command)
-                Button(action: { session.selectedViewMode = .canvas }) { EmptyView() }
-                    .keyboardShortcut("2", modifiers: .command)
-                Button(action: { session.selectedViewMode = .gatt }) { EmptyView() }
-                    .keyboardShortcut("3", modifiers: .command)
-                Button(action: { session.selectedViewMode = .test }) { EmptyView() }
-                    .keyboardShortcut("4", modifiers: .command)
-                Button(action: { session.selectedViewMode = .pcb }) { EmptyView() }
-                    .keyboardShortcut("5", modifiers: .command)
-                Button(action: { session.selectedViewMode = .gdb }) { EmptyView() }
-                    .keyboardShortcut("6", modifiers: .command)
-                Button(action: { session.selectedViewMode = .split }) { EmptyView() }
-                    .keyboardShortcut("7", modifiers: .command)
+
             }
             .frame(width: 0, height: 0)
             .opacity(0)
@@ -280,9 +256,11 @@ public struct ResizableVSplitView<Top: View, Bottom: View>: View {
 
 public struct AppTopBarView: View {
     @ObservedObject var session: EmulatorSession
+    @ObservedObject var firmwareBuild: FirmwareBuildController
     
-    public init(session: EmulatorSession) {
+    public init(session: EmulatorSession, firmwareBuild: FirmwareBuildController) {
         self.session = session
+        self.firmwareBuild = firmwareBuild
     }
     
     public var body: some View {
@@ -290,28 +268,6 @@ public struct AppTopBarView: View {
             HStack(spacing: 10) {
                 // MARK: Leading Section: Sidebar Toggle & App Branding
                 HStack(spacing: 8) {
-                    // Dedicated Sidebar Toggle Icon Button with Visual Active State
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            session.isSidebarVisible.toggle()
-                        }
-                    }) {
-                        Image(systemName: "sidebar.leading")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(session.isSidebarVisible ? .accentColor : .secondary)
-                            .frame(width: 24, height: 24)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(session.isSidebarVisible ? Color.accentColor.opacity(0.15) : Color(NSColor.controlBackgroundColor))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(session.isSidebarVisible ? Color.accentColor.opacity(0.35) : Color.gray.opacity(0.2), lineWidth: 0.75)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help("Toggle Project Sidebar (⌘0)")
-                
                     Text("Jepler Dev")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
@@ -331,8 +287,13 @@ public struct AppTopBarView: View {
             
                 Divider().frame(height: 18)
             
-                // MARK: Simulation Controls (Start / Stop / Reboot)
+                // MARK: Build and simulation controls
                 HStack(spacing: 6) {
+                    Button(action: { firmwareBuild.buildAndRun(session: session) }) {
+                        Label(firmwareBuild.isBuilding ? "Building…" : "Build & Run", systemImage: "hammer")
+                    }
+                    .disabled(firmwareBuild.isBuilding)
+                    .help(firmwareBuild.status)
                     Button(action: {
                         if session.isRunning {
                             session.stopSession()
@@ -381,6 +342,21 @@ public struct AppTopBarView: View {
                 }
                 .padding(.trailing, 12)
             }
+            HStack(spacing: 8) {
+                Text(firmwareBuild.status)
+                    .font(.system(size: 10, design: .monospaced))
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                if let logURL = firmwareBuild.lastLogURL {
+                    Button("Build Log") { NSWorkspace.shared.open(logURL) }
+                        .font(.system(size: 10))
+                }
+                if firmwareBuild.isBuilding {
+                    Button("Cancel Build") { firmwareBuild.cancel() }
+                        .font(.system(size: 10))
+                }
+                Spacer(minLength: 0)
+            }.padding(.horizontal, 10)
             // MARK: Resizable Horizontal Tab Bar (Workbench Modes)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -409,7 +385,8 @@ public struct AppTopBarView: View {
             
             .padding(.horizontal, 10)
         }
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 4)
+        .workbenchGlass(cornerRadius: 12)
+        .padding(4)
     }
 }

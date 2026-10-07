@@ -39,6 +39,8 @@ public final class DisplayStreamStore: ObservableObject {
     public func stopPolling() {
         frameTimer?.invalidate()
         frameTimer = nil
+        lastFrameTimes.removeAll()
+        displayMetrics.fps = 0
     }
     
     private func scheduleFrameIngestion(ppmURL: URL) {
@@ -62,7 +64,6 @@ public final class DisplayStreamStore: ObservableObject {
                 
                 self.oledImage = cgImg
                 self.displayMetrics.frameCount += 1
-                self.displayMetrics.drawCallCount += 1
                 self.displayMetrics.litPixelCount = litCount
                 self.displayMetrics.lastFrameLatencyMs = latencyMs
                 

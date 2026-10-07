@@ -29,9 +29,9 @@ public enum NotificationCategory: UInt8, CaseIterable, Identifiable {
 
 public struct NotificationPayload {
     public var category: NotificationCategory = .sms
-    public var title: String = "Alice Smith"
-    public var subtitle: String = "Meeting Update"
-    public var message: String = "Ready to test F-91 Jepler watch firmware?"
+    public var title: String = "Jake Fay"
+    public var subtitle: String = "Message"
+    public var message: String = "u up? ;)"
     
     public init() {}
     

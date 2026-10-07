@@ -21,7 +21,7 @@ print(';'.join(paths))
 PY
 )
 .venv/bin/python -m west build -b nrf52840dk/nrf52840 -d build/renode-app Firmware/zephyr -- \
-    -DZEPHYR_MODULES="$modules" -DEXTRA_DTC_OVERLAY_FILE="$root/Firmware/renode/display.overlay"
+    -DZEPHYR_MODULES="$modules" -DEXTRA_CONF_FILE="$root/Firmware/renode/test-bridge.conf" -DEXTRA_DTC_OVERLAY_FILE="$root/Firmware/renode/display.overlay"
 .venv/bin/python bootloader/mcuboot/scripts/imgtool.py sign \
     -k bootloader/mcuboot/root-rsa-2048.pem --header-size 0x200 --align 4 \
     --version 1.0.0 --slot-size 0x76000 --max-sectors 256 \
@@ -39,3 +39,5 @@ for key, letter, position in [('1','A','top left'),('2','B','bottom left'),('3',
                         pin=gpio.data['pin'], active_low=bool(gpio.data['flags'] & 1)))
 Path('build/renode-app/buttons.json').write_text(json.dumps(buttons, indent=2) + '\n')
 PY
+
+PYTHONPATH="$root/zephyr/scripts/dts/python-devicetree/src" .venv/bin/python Firmware/renode/export-manifest.py

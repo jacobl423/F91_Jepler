@@ -4,9 +4,9 @@ public struct GATTTestInjectorView: View {
     @ObservedObject var session: EmulatorSession
     
     @State private var notifCategory: NotificationCategory = .sms
-    @State private var notifTitle: String = "Jake Fay"
-    @State private var notifSubtitle: String = "Message"
-    @State private var notifBody: String = "u up? ;)"
+    @State private var notifTitle: String = NotificationPayload().title
+    @State private var notifSubtitle: String = NotificationPayload().subtitle
+    @State private var notifBody: String = NotificationPayload().message
     
     @State private var is24HourClock: Bool = false
     @State private var batteryVoltage: Double = 3.9

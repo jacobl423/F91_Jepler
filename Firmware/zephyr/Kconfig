@@ -1,0 +1,8 @@
+mainmenu "F91 watch"
+source "Kconfig.zephyr"
+config F91_TEST_BRIDGE
+    bool "Emulator-only UART service test bridge"
+    default n
+    help
+      Accept F91TEST commands on the console UART. Never enable on production
+      hardware: this bypasses BLE security for controlled firmware testing.
