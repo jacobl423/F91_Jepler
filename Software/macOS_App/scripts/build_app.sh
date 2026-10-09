@@ -17,11 +17,17 @@ cd "$ROOT_DIR"
 ARCHITECTURES=(arm64 x86_64)
 if [[ "${1:-}" == "--native" ]]; then ARCHITECTURES=("$(uname -m)"); fi
 BINARIES=()
+STAGING_DIR=$(mktemp -d)
+trap 'rm -rf "$STAGING_DIR"' EXIT
 for ARCH in "${ARCHITECTURES[@]}"; do
     TRIPLE="$ARCH-apple-macosx13.0"
     swift build --disable-sandbox -c release --triple "$TRIPLE"
     BIN_DIR=$(swift build --disable-sandbox -c release --triple "$TRIPLE" --show-bin-path)
-    BINARIES+=("$BIN_DIR/F91JeplerEmulator")
+    # Xcode's SwiftPM backend may reuse one output path across target triples.
+    # Preserve each slice before the next build overwrites that path.
+    cp "$BIN_DIR/F91JeplerEmulator" "$STAGING_DIR/F91JeplerEmulator-$ARCH"
+    lipo "$STAGING_DIR/F91JeplerEmulator-$ARCH" -verify_arch "$ARCH"
+    BINARIES+=("$STAGING_DIR/F91JeplerEmulator-$ARCH")
 done
 
 echo "Creating App Bundle at: $APP_BUNDLE"
@@ -35,17 +41,26 @@ else
     lipo -create "${BINARIES[@]}" -output "$APP_BUNDLE/Contents/MacOS/F91JeplerEmulator"
 fi
 chmod +x "$APP_BUNDLE/Contents/MacOS/F91JeplerEmulator"
+for ARCH in "${ARCHITECTURES[@]}"; do
+    lipo "$APP_BUNDLE/Contents/MacOS/F91JeplerEmulator" -verify_arch "$ARCH"
+done
 
 cp "$ROOT_DIR/F91JeplerEmulator/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
-cp -R "$ROOT_DIR/F91JeplerEmulator/Resources/Embedded" "$APP_BUNDLE/Contents/Resources/"
+# Only emulator support and UI assets belong in the application.
+mkdir -p "$APP_BUNDLE/Contents/Resources/Embedded"
+for RESOURCE in F91SSD1306.cs jepler-icon.png; do
+    cp "$ROOT_DIR/F91JeplerEmulator/Resources/Embedded/$RESOURCE" "$APP_BUNDLE/Contents/Resources/Embedded/"
+done
 
 if [ -f "$ROOT_DIR/F91JeplerEmulator/Resources/AppIcon.icns" ]; then
     cp "$ROOT_DIR/F91JeplerEmulator/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
 
-# Ad-hoc code sign app bundle for macOS Apple Silicon Gatekeeper
+bash "$ROOT_DIR/scripts/bundle_renode.sh" "$APP_BUNDLE" "${ARCHITECTURES[@]}"
+
+# Ad-hoc sign the app and its embedded runtimes.
 echo "Signing application bundle with ad-hoc signature..."
-codesign --force --deep --sign - "$APP_BUNDLE"
+python3 "$ROOT_DIR/scripts/sign_bundle.py" "$APP_BUNDLE"
 
 echo "Successfully built and signed standalone macOS App Bundle!"
 echo "Location: $APP_BUNDLE"

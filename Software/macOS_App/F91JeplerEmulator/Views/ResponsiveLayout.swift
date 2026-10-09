@@ -50,10 +50,11 @@ struct AdaptiveSplitView<Content: View>: View {
                 HSplitView(content: content)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             } else {
-                VStack(spacing: 8, content: content)
+                VSplitView(content: content)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
+        .clipped()
     }
 }
 
@@ -71,4 +72,19 @@ enum SplitPaneSizing {
 struct SplitDragState {
     let startHeight: CGFloat
     var translation: CGFloat
+}
+
+/// Allocate side panes without consuming the canvas's reserved width.
+enum WorkbenchColumnSizing {
+    static func widths(available: CGFloat, sidebar: CGFloat, terminal: CGFloat,
+                       sidebarVisible: Bool, terminalVisible: Bool) -> (left: CGFloat, right: CGFloat) {
+        let sideSpace = max(0, available - 40 - 280)
+        let leftMinimum: CGFloat = sidebarVisible ? 246 : 60
+        let rightMinimum: CGFloat = terminalVisible ? 276 : 60
+        let left = sidebarVisible
+            ? min(max(leftMinimum, sidebar), min(396, max(leftMinimum, sideSpace - rightMinimum))) : 60
+        let right = terminalVisible
+            ? min(max(rightMinimum, terminal), max(rightMinimum, sideSpace - left)) : 60
+        return (left, right)
+    }
 }

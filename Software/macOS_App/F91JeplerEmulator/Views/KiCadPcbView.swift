@@ -4,6 +4,7 @@ import AppKit
 public struct KiCadPcbView: View {
     @ObservedObject var session: EmulatorSession
     @State private var showSideInspectorInCanvas: Bool = false
+    @State private var showPinAuditDetails = false
     
     public init(session: EmulatorSession) {
         self.session = session
@@ -115,27 +116,33 @@ public struct KiCadPcbView: View {
             
             // GPIO Pin Audit Alert Banner (If KiCad nets changed vs emulator GPIOs)
             if let audit = session.pinAuditResult, audit.hasMismatches || audit.hasUnknowns {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(audit.hasMismatches ? "PCB / Firmware Pin Mismatch" : "PCB / Firmware Pin Audit Incomplete")
                             .font(.system(size: 10.5, weight: .bold))
                             .foregroundColor(.orange)
-                        ForEach(audit.entries.filter { !$0.isMatching }) { entry in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(entry.signalName): PCB \(entry.detectedPin) · firmware \(entry.expectedPin) · net \(entry.connectedNet)")
-                                    .font(.system(size: 9.5, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                if let guidance = entry.repairGuidance {
-                                    Text(guidance)
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.primary)
+                        DisclosureGroup("Pin audit details", isExpanded: $showPinAuditDetails) {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(audit.entries.filter { !$0.isMatching }) { entry in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("\(entry.signalName): PCB \(entry.detectedPin) · firmware \(entry.expectedPin) · net \(entry.connectedNet)")
+                                                .font(.system(size: 9.5, design: .monospaced))
+                                                .foregroundColor(.secondary)
+                                            if let guidance = entry.repairGuidance {
+                                                Text(guidance)
+                                                    .font(.system(size: 10))
+                                                    .foregroundColor(.primary)
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            .frame(height: 100)
                         }
                     }
-                    Spacer()
                     if !session.hasVerifiedFirmwareForAudit {
                         Button("Configure & Validate") { session.showSetupSheet = true }
                             .buttonStyle(.bordered)
@@ -184,7 +191,7 @@ public struct KiCadPcbView: View {
                         
                         if showSideInspectorInCanvas {
                             PCBComponentInspectorPanel(session: session)
-                                .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 180)
+                                .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 80)
                         }
                     }
                     .safeAreaInset(edge: .top, spacing: 0) {

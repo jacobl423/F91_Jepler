@@ -113,7 +113,7 @@ public struct PCBComponentInspectorPanel: View {
                 }
                 .listStyle(.inset)
             }
-            .frame(minWidth: 220, idealWidth: 260, maxWidth: .infinity, minHeight: 140)
+            .frame(minWidth: 220, idealWidth: 260, maxWidth: .infinity, minHeight: 80)
             
             // Right Details Inspector: Selected Component Deep-Dive
             if let selectedFp = session.pcbBoard.footprint(reference: session.selectedFootprintID) {

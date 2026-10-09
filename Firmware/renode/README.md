@@ -56,6 +56,22 @@ The virtual glass uses A1/C8 as its normal wiring. The 40-row emulation overlay
 allows whole eight-row SSD1306 writes; the original 39-row hardware setting
 is left in `Firmware/zephyr/app.overlay`.
 
+The Renode platform uses the nRF52840 CPU, GPIO, RTC, clocks, UART, I2C, flash,
+RAM, PPI and Nordic radio peripherals. `nrf52840.repl` mirrors Renode's bundled
+nRF52840 platform and routes the in-repo `F91NRF52840Radio` type to the same
+radio IRQ; that type inherits Renode's supported radio implementation. The
+radio is a virtual BLE link model, not an RF/antenna simulation. The draft's
+accelerometer and external flash are explicitly optional and not populated;
+the battery, regulator, charger, crystals, buttons, and OLED power/analog
+circuits are not analog SPICE models. Battery voltage/charging, sensor data,
+RF propagation, 32 MHz crystal startup/drift, and power consumption are not
+simulated. Button GPIO mappings in this viewer remain DK defaults pending final
+custom-PCB A/B/C pin numbers.
+
+If Renode changes its upstream `nrf52840.repl`, keep the project copy in sync.
+The boot check loads this same board script, so it verifies the active platform
+and radio wiring as well as firmware boot.
+
 `build-display.sh` creates `build/renode-app/app.signed.bin` with the existing
 MCUboot development key. It leaves `bin/app.signed.bin` and MCUboot unchanged.
 All generated configuration, temporary files, frames and logs remain under
@@ -100,8 +116,9 @@ APP_BIN=build/renode-app/app.signed.bin bash Firmware/renode/boot-check.sh
 ```
 
 This starts a fresh process, attaches UART0 before execution, runs five simulated
-seconds, and quits. A 45-second host watchdog bounds a stalled run. Unique log
-directories prevent stale UART results. Exit status 0 requires both MCUboot's
+seconds, and quits. The project-local Renode platform/radio and SSD1306 models
+are loaded through `f91_jepler.resc`. A 45-second host watchdog bounds a stalled
+run. Unique log directories prevent stale UART results. Exit status 0 requires both MCUboot's
 jump message and the application startup marker; 1 means boot was not confirmed.
 The original image may boot without successfully drawing, so check for
 `Watch screen ready` when using the display build.

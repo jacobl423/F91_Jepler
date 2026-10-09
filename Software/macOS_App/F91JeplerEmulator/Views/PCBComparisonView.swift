@@ -50,11 +50,11 @@ public struct PCBComparisonView: View {
                                 unifiedOverlayCanvas(base: session.pcbBoard, draft: draft, diff: diff)
                             }
                         }
-                        .frame(minWidth: 260, maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
+                        .frame(minWidth: 260, maxWidth: .infinity, minHeight: 80, maxHeight: .infinity)
                         
                         // Right Panel: Change Log Table
                         changeLogPanel(diff: diff)
-                            .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 140)
+                            .frame(minWidth: 260, idealWidth: 320, maxWidth: .infinity, minHeight: 80)
                     }
                 }
             } else {

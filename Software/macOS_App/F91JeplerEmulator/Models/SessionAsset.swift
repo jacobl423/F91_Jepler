@@ -80,6 +80,19 @@ public enum SessionAssetKind: String, CaseIterable, Identifiable, Codable, Senda
         case .rescScript: return SessionPersistenceKeys.customRescPath
         }
     }
+
+    public var bookmarkUserDefaultsKey: String? {
+        switch self {
+        case .pcb: return "jepler.asset.pcb.bookmark"
+        case .appFirmware: return "jepler.asset.appFirmware.bookmark"
+        case .bootloader: return "jepler.asset.bootloader.bookmark"
+        case .rescScript: return nil
+        }
+    }
+
+    public var bookmarkUsesSecurityScopeKey: String? {
+        bookmarkUserDefaultsKey.map { "\($0).securityScoped" }
+    }
 }
 
 // MARK: - DetectedAssetFormat
@@ -238,7 +251,7 @@ public struct SessionAsset: Identifiable, Equatable, Hashable, Sendable {
     }
 
     public var secondaryDetail: String {
-        metadata?.secondaryDetail ?? (isCustom ? "Custom asset" : "Default embedded")
+        metadata?.secondaryDetail ?? (isCustom ? "Custom asset" : "No external file selected")
     }
 
     public var fileSizeFormatted: String {

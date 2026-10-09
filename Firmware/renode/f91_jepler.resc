@@ -7,7 +7,11 @@ $app_bin?=@bin/app.signed.bin
 $name?="nRF52840"
 mach create $name
 
-machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
+# The upstream platform registers its bundled NRF52840_Radio type. Load the
+# project-local variant first and use an otherwise identical platform file to
+# replace only that component, preserving its IRQ wiring and all other models.
+include @Firmware/renode/radio/F91NRF52840Radio.cs
+include @Firmware/renode/nrf52840.repl
 # The built-in NRF52840_RTC timers use an ideal 32768 Hz clock.
 # Zephyr selects LFXO via &lfclk in the application overlay; no extra GPIO oscillator
 # is needed. Renode does not model quartz drift or analog startup behavior.

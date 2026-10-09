@@ -1,0 +1,3 @@
+# Keep the explicitly distributed external component binaries with their manifest.
+!**/*.bin
+!**/*.elf

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "imageSHA256": "88995d32f2b873ecea027bdc52490bcd05949e30913b1ecb426fe532f64a367c",
+  "mcubootSHA256": "0a92ba5591aca0c33fa51bf3188549e3b69e7cbd0454d22893268120a3a51447",
+  "sourceRevision": "992e647d8096a324d7a925d2512cc2ba9a6e93d2",
+  "sourceDirty": true,
+  "board": "nrf52840dk/nrf52840",
+  "elfPath": "zephyr.elf",
+  "elfSHA256": "8998f81888df19092756c78481374c192f25539d6d2a90911cc92a55d272a674",
+  "configPath": "firmware.config",
+  "configSHA256": "bf7c031ea96c181d00162aba85cddd4733cc68d4b08aaf25ecf02bb4a3eaf23d",
+  "buttons": [
+    {
+      "key": "1",
+      "label": "A",
+      "position": "top left",
+      "port": "gpio0",
+      "pin": 11,
+      "active_low": true
+    },
+    {
+      "key": "2",
+      "label": "B",
+      "position": "bottom left",
+      "port": "gpio0",
+      "pin": 12,
+      "active_low": true
+    },
+    {
+      "key": "3",
+      "label": "C",
+      "position": "bottom right",
+      "port": "gpio0",
+      "pin": 24,
+      "active_low": true
+    }
+  ],
+  "framebufferHeight": 40,
+  "visibleHeight": 39,
+  "i2cSDA": "P0.26",
+  "i2cSCL": "P0.27"
+}

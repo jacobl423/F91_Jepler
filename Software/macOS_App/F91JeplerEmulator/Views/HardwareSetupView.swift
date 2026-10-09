@@ -1,10 +1,13 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 public struct HardwareSetupView: View {
     @ObservedObject var session: EmulatorSession
     @Environment(\.dismiss) private var dismiss
     
+    @State private var detectedRenode: String?
+    @State private var advanced = false
     private let onBuildAndRun: (() -> Void)?
 
     public init(session: EmulatorSession, onBuildAndRun: (() -> Void)? = nil) {
@@ -16,9 +19,9 @@ public struct HardwareSetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Workbench & Hardware Configuration")
+                    Text("Set up your watch")
                         .font(.system(size: 15, weight: .bold))
-                    Text("Configure Renode binary, Zephyr workspace, scripts, and firmware binaries.")
+                    Text("Select external components before starting the emulator.")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
@@ -31,6 +34,8 @@ public struct HardwareSetupView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    quickStart
+                    DisclosureGroup("Advanced settings · custom firmware and development", isExpanded: $advanced) {
                     // Section 1: Toolchain & Execution Environment
                     VStack(alignment: .leading, spacing: 8) {
                         Text("1. Emulator & Toolchain Paths")
@@ -58,6 +63,7 @@ public struct HardwareSetupView: View {
                                 panel.canChooseDirectories = false
                                 if panel.runModal() == .OK, let url = panel.url {
                                     session.customRenodePath = url.path
+                                    refreshTools()
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -108,7 +114,7 @@ public struct HardwareSetupView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Renode Simulation Script (.resc)")
                                     .font(.system(size: 11, weight: .semibold))
-                                Text(session.customRescURL?.lastPathComponent ?? "Default (test_boot.resc / f91_jepler.resc)")
+                                Text(session.customRescURL?.lastPathComponent ?? "Optional — generated from selected firmware")
                                     .font(.system(size: 9.5, design: .monospaced))
                                     .foregroundColor(.secondary)
                             }
@@ -194,40 +200,103 @@ public struct HardwareSetupView: View {
                             }
                         }
                     }
+                    }
                 }
             }
-            .frame(maxHeight: 380)
+            .frame(maxHeight: .infinity)
             
             Divider()
             
             HStack {
-                Button("Reset Defaults") {
+                Button("Clear Selections") {
                     session.customRenodePath = nil
                     session.customWorkspaceURL = nil
                     session.customRescURL = nil
                     session.customPCBURL = nil
                     session.customAppBinURL = nil
                     session.customBootloaderURL = nil
-                    session.loadEmbeddedDefaults()
+                    session.clearAssetSelections()
+                    refreshTools()
                 }
                 .font(.system(size: 11))
                 
                 Spacer()
                 
+                if advanced {
                 Button("Start Existing Firmware") {
                     session.startSession()
                     dismiss()
                 }
                 .buttonStyle(.bordered)
+                .disabled(!session.canStartSession)
                 Button("Build & Run") {
                     dismiss()
                     onBuildAndRun?()
                 }
                 .buttonStyle(.borderedProminent)
+                }
             }
         }
         .padding(20)
-        .frame(width: 540, height: 500)
+        .frame(width: 600, height: 600)
+        .onAppear { refreshTools() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshTools() }
+    }
+
+    private func refreshTools() {
+        detectedRenode = RenodeProcessManager.findRenodeExecutable(customPath: session.customRenodePath)
+    }
+
+    private var quickStart: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(detectedRenode == nil ? "1. Restore emulator" : "1. Emulator ready", systemImage: detectedRenode == nil ? "arrow.down.circle" : "checkmark.circle.fill")
+                .font(.headline)
+            if let path = detectedRenode {
+                if path == RenodeProcessManager.bundledRenodeExecutable {
+                    Text("Renode is built in. No installation or downloads needed.")
+                } else {
+                    Text("Using your installed Renode.").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("The built-in emulator is missing from this copy. Download a fresh Jepler Dev release, or install Renode separately using the links below.")
+                #if arch(arm64)
+                Text("Choose the Apple Silicon / arm64 package for this Mac.").font(.caption)
+                #else
+                Text("Choose the Intel / x86_64 package for this Mac.").font(.caption)
+                #endif
+                HStack {
+                    Link("Download Renode", destination: URL(string: "https://github.com/renode/renode/releases/latest")!)
+                    Link("Installation help", destination: URL(string: "https://renode.readthedocs.io/en/latest/introduction/installing.html")!)
+                    Button("Check again") { refreshTools() }
+                }
+                DisclosureGroup("Already use Homebrew?") {
+                    Text("Run this in Terminal, then click Check again:").font(.caption)
+                    Text("brew install renode/tap/renode").font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Button("Copy command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("brew install renode/tap/renode", forType: .string)
+                    }
+                }
+            }
+            Divider()
+            Label("2. Select external components", systemImage: "folder").font(.headline)
+            Text("PCB layouts, firmware, and bootloaders stay outside the app. Your selections are remembered on this Mac.")
+            ForEach([SessionAssetKind.pcb, .appFirmware, .bootloader]) { kind in
+                FilePickerRow(title: kind.title, icon: kind.iconName,
+                              selectedURL: session.assets[kind]?.fileURL,
+                              allowedExtensions: kind.allowedExtensions,
+                              onSelect: { session.updateAsset(kind: kind, url: $0) })
+            }
+            Button("Start Renode") {
+                session.startSession()
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(detectedRenode == nil || !session.canStartSession || session.isRunning || session.isSessionStarting)
+
+        }
+        .font(.callout)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -247,7 +316,7 @@ struct FilePickerRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
-                Text(selectedURL?.lastPathComponent ?? "Default embedded resource")
+                Text(selectedURL?.lastPathComponent ?? "Select an external file")
                     .font(.system(size: 9.5, design: .monospaced))
                     .foregroundColor(selectedURL != nil ? .primary : .secondary)
             }
@@ -258,7 +327,7 @@ struct FilePickerRow: View {
                 let panel = NSOpenPanel()
                 panel.allowsMultipleSelection = false
                 panel.canChooseDirectories = false
-                panel.allowedContentTypes = []
+                panel.allowedContentTypes = allowedExtensions.compactMap { UTType(filenameExtension: $0) }
                 if panel.runModal() == .OK, let url = panel.url {
                     onSelect(url)
                 }

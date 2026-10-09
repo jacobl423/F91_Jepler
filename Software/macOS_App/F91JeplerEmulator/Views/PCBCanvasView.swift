@@ -17,6 +17,8 @@ public struct PCBCanvasView: View {
     @State private var zoomScale: CGFloat = 12.0
     @State private var panOffset: CGSize = .zero
     @State private var dragStartOffset: CGSize = .zero
+    @State private var cursorLocation: CGPoint?
+    @State private var lastMagnification: CGFloat = 1
     
     // Layer Visibility
     @State private var showFCu: Bool = true
@@ -163,6 +165,7 @@ public struct PCBCanvasView: View {
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
+                        cursorLocation = location
                         let centerOffset = CGPoint(
                             x: geo.size.width / 2.0 + panOffset.width,
                             y: geo.size.height / 2.0 + panOffset.height
@@ -179,6 +182,7 @@ public struct PCBCanvasView: View {
                             self.hoveredFootprintRef = foundFp
                         }
                     case .ended:
+                        cursorLocation = nil
                         if self.hoveredFootprintRef != nil {
                             self.hoveredFootprintRef = nil
                         }
@@ -218,6 +222,20 @@ public struct PCBCanvasView: View {
                             if !isRulerMode {
                                 dragStartOffset = panOffset
                             }
+                        }
+                )
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { magnification in
+                            let factor = magnification / lastMagnification
+                            lastMagnification = magnification
+                            zoom(by: factor, around: cursorLocation ?? CGPoint(
+                                x: geo.size.width / 2,
+                                y: geo.size.height / 2
+                            ), in: geo.size)
+                        }
+                        .onEnded { _ in
+                            lastMagnification = 1
                         }
                 )
                 // Tap Gestures (Single Click -> Select / Pad Net, Double Click -> Center)
@@ -283,7 +301,6 @@ public struct PCBCanvasView: View {
                 }
                 .onChange(of: geo.size) { newSize in
                     canvasSize = newSize
-                    fitToBoard(in: newSize)
                 }
                 .onAppear {
                     canvasSize = geo.size
@@ -328,13 +345,13 @@ public struct PCBCanvasView: View {
             
             // Zoom Controls
             HStack(spacing: 4) {
-                Button(action: { zoomScale = max(2.0, zoomScale * 0.8) }) {
+                Button(action: { zoom(by: 0.8, around: canvasCenter, in: canvasSize) }) {
                     Image(systemName: "minus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
                 .help("Zoom Out")
                 
-                Button(action: { zoomScale = min(40.0, zoomScale * 1.25) }) {
+                Button(action: { zoom(by: 1.25, around: canvasCenter, in: canvasSize) }) {
                     Image(systemName: "plus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
@@ -669,6 +686,23 @@ public struct PCBCanvasView: View {
         self.panOffset = .zero
         self.dragStartOffset = .zero
     }
+
+    private var canvasCenter: CGPoint {
+        CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+    }
+
+    private func zoom(by factor: CGFloat, around point: CGPoint, in size: CGSize) {
+        guard let result = PCBViewportLayout.zoomed(
+            scale: zoomScale,
+            factor: factor,
+            around: point,
+            canvasSize: size,
+            panOffset: panOffset
+        ) else { return }
+        zoomScale = result.scale
+        panOffset = result.panOffset
+        dragStartOffset = result.panOffset
+    }
     
     private func centerOnFootprint(fp: Footprint, in size: CGSize) {
         let board = session.pcbBoard
@@ -808,4 +842,3 @@ struct PCBCoordinateHUD: View {
         }
     }
 }
-

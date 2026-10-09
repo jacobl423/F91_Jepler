@@ -103,7 +103,7 @@ public final class EmulatorSession: ObservableObject {
             if let newURL = newValue {
                 updateAsset(kind: .pcb, url: newURL)
             } else {
-                revertAssetToDefault(kind: .pcb)
+                clearAsset(kind: .pcb)
             }
         }
     }
@@ -117,7 +117,7 @@ public final class EmulatorSession: ObservableObject {
             if let newURL = newValue {
                 updateAsset(kind: .appFirmware, url: newURL)
             } else {
-                revertAssetToDefault(kind: .appFirmware)
+                clearAsset(kind: .appFirmware)
             }
         }
     }
@@ -131,7 +131,7 @@ public final class EmulatorSession: ObservableObject {
             if let newURL = newValue {
                 updateAsset(kind: .bootloader, url: newURL)
             } else {
-                revertAssetToDefault(kind: .bootloader)
+                clearAsset(kind: .bootloader)
             }
         }
     }
@@ -145,12 +145,13 @@ public final class EmulatorSession: ObservableObject {
             if let newURL = newValue {
                 updateAsset(kind: .rescScript, url: newURL)
             } else {
-                revertAssetToDefault(kind: .rescScript)
+                clearAsset(kind: .rescScript)
             }
         }
     }
     
     private let userDefaults: UserDefaults
+    private var securityScopedAssetURLs: [SessionAssetKind: URL] = [:]
     
     public let logStore = TerminalLogStore.shared
     public let displayStore = DisplayStreamStore.shared
@@ -307,100 +308,75 @@ public final class EmulatorSession: ObservableObject {
     
     private func loadInitialAssets() {
         for kind in SessionAssetKind.allCases {
-            if let savedPath = userDefaults.string(forKey: kind.userDefaultsKey) {
-                if FileManager.default.fileExists(atPath: savedPath) {
-                    let customURL = URL(fileURLWithPath: savedPath)
-                    let asset = SessionAsset(
+            assets[kind] = SessionAsset(kind: kind)
+            guard let bookmarkKey = kind.bookmarkUserDefaultsKey,
+                  let bookmark = userDefaults.data(forKey: bookmarkKey) else {
+                userDefaults.removeObject(forKey: kind.userDefaultsKey)
+                continue
+            }
+
+            let usesSecurityScope = kind.bookmarkUsesSecurityScopeKey.map {
+                userDefaults.bool(forKey: $0)
+            } ?? false
+            do {
+                var isStale = false
+                let options: URL.BookmarkResolutionOptions = usesSecurityScope ? [.withSecurityScope] : []
+                let url = try URL(
+                    resolvingBookmarkData: bookmark,
+                    options: options,
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                )
+                if usesSecurityScope && url.startAccessingSecurityScopedResource() {
+                    securityScopedAssetURLs[kind] = url
+                }
+                guard FileManager.default.isReadableFile(atPath: url.path),
+                      kind.allowedExtensions.contains(url.pathExtension.lowercased()) else {
+                    assets[kind] = SessionAsset(
                         kind: kind,
-                        url: customURL,
-                        state: .customLoaded,
-                        metadata: nil,
+                        url: url,
+                        state: .missing("File is unavailable or has an unsupported extension"),
                         isCustom: true
                     )
-                    self.assets[kind] = asset
-                    inspectStartupAssetAsync(kind: kind, url: customURL)
-                } else {
-                    // Stale path on disk: clean up and fall back to embedded default
-                    userDefaults.removeObject(forKey: kind.userDefaultsKey)
-                    loadDefaultAsset(kind: kind)
+                    errorMessage = "Previously selected \(kind.title) is unavailable. Choose the file again to restore access."
+                    continue
                 }
-            } else {
-                loadDefaultAsset(kind: kind)
-            }
-        }
-        
-        // Initialize PCB board and watcher if available
-        if let pcbAsset = assets[.pcb], let pcbURL = pcbAsset.fileURL {
-            self.activePCBURL = pcbURL
-            Task { [weak self] in
-                if let board = try? await KiCadParser.parseAsync(fileURL: pcbURL) {
-                    await MainActor.run {
-                        self?.pcbBoard = board
-                        self?.validateActiveBoard()
-                    }
+
+                if isStale {
+                    saveAssetBookmark(url, kind: kind, usesSecurityScope: usesSecurityScope)
                 }
-                await MainActor.run {
-                    self?.startWatchingActivePCB()
+                installAsset(kind: kind, url: url)
+            } catch {
+                let path = userDefaults.string(forKey: kind.userDefaultsKey)
+                if let path {
+                    assets[kind] = SessionAsset(
+                        kind: kind,
+                        url: URL(fileURLWithPath: path),
+                        state: .failed(error: error.localizedDescription),
+                        isCustom: true
+                    )
                 }
+                errorMessage = "Could not restore access to the previously selected \(kind.title). Choose the file again. \(error.localizedDescription)"
             }
         }
     }
-    
-    private func loadDefaultAsset(kind: SessionAssetKind) {
-        let (resourceName, resourceExt) = kind.defaultResourceName
-        let defaultURL = ResourceLoader.url(forResource: resourceName, withExtension: resourceExt)
-        let state: AssetLoadState = defaultURL != nil ? .defaultEmbedded : .missing("Default resource not found")
-        let asset = SessionAsset(
-            kind: kind,
-            url: defaultURL,
-            state: state,
-            metadata: nil,
-            isCustom: false
-        )
-        self.assets[kind] = asset
-        if let url = defaultURL {
-            inspectAssetAsync(kind: kind, url: url, isCustom: false)
+
+    public var canStartSession: Bool {
+        [SessionAssetKind.pcb, .appFirmware, .bootloader].allSatisfy { kind in
+            guard let asset = assets[kind], asset.isCustom, asset.isReady,
+                  let url = asset.fileURL else { return false }
+            return FileManager.default.isReadableFile(atPath: url.path)
+                && kind.allowedExtensions.contains(url.pathExtension.lowercased())
         }
     }
-    
-    private func inspectStartupAssetAsync(kind: SessionAssetKind, url: URL) {
-        Task { [weak self] in
-            // Safe inspection: if file is corrupted, returns nil without throwing
-            if let metadata = await AssetInspector.inspectSafe(url: url, kind: kind, isCustom: true) {
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    if var existing = self.assets[kind] {
-                        existing.metadata = metadata
-                        existing.state = .loaded(metadata)
-                        self.assets[kind] = existing
-                    }
-                }
-            } else {
-                // Startup inspection failed: remove corrupted key from UserDefaults and revert to default asset
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.userDefaults.removeObject(forKey: kind.userDefaultsKey)
-                    self.loadDefaultAsset(kind: kind)
-                    if kind == .pcb {
-                        if let defaultURL = self.assets[.pcb]?.fileURL {
-                            self.activePCBURL = defaultURL
-                            self.reloadPCB(fileURL: defaultURL)
-                            self.startWatchingActivePCB()
-                        }
-                    }
-                    self.errorMessage = "Failed to load custom \(kind.title); restored default"
-                }
-            }
-        }
-    }
-    
+
     private func inspectAssetAsync(kind: SessionAssetKind, url: URL, isCustom: Bool) {
         Task { [weak self] in
             do {
                 let metadata = try await AssetInspector.inspect(url: url, kind: kind, isCustom: isCustom)
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
-                    if var existing = self.assets[kind] {
+                    if var existing = self.assets[kind], existing.fileURL == url {
                         existing.metadata = metadata
                         existing.state = .loaded(metadata)
                         self.assets[kind] = existing
@@ -409,10 +385,7 @@ public final class EmulatorSession: ObservableObject {
             } catch {
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
-                    if isCustom {
-                        self.userDefaults.removeObject(forKey: kind.userDefaultsKey)
-                    }
-                    if var existing = self.assets[kind] {
+                    if var existing = self.assets[kind], existing.fileURL == url {
                         existing.state = .failed(error: error.localizedDescription)
                         self.assets[kind] = existing
                     }
@@ -424,12 +397,46 @@ public final class EmulatorSession: ObservableObject {
     // MARK: - Asset Quick Actions
     
     public func updateAsset(kind: SessionAssetKind, url: URL) {
+        if let previousURL = securityScopedAssetURLs.removeValue(forKey: kind) {
+            previousURL.stopAccessingSecurityScopedResource()
+        }
+        let usesSecurityScope = url.startAccessingSecurityScopedResource()
+        if usesSecurityScope {
+            securityScopedAssetURLs[kind] = url
+        }
+        if kind.bookmarkUserDefaultsKey != nil {
+            saveAssetBookmark(url, kind: kind, usesSecurityScope: usesSecurityScope)
+        } else {
+            userDefaults.set(url.path, forKey: kind.userDefaultsKey)
+        }
+        installAsset(kind: kind, url: url)
+    }
+
+    private func saveAssetBookmark(_ url: URL, kind: SessionAssetKind, usesSecurityScope: Bool) {
+        guard let bookmarkKey = kind.bookmarkUserDefaultsKey else { return }
         userDefaults.set(url.path, forKey: kind.userDefaultsKey)
-        
+        do {
+            let options: URL.BookmarkCreationOptions = usesSecurityScope ? [.withSecurityScope] : []
+            let bookmark = try url.bookmarkData(
+                options: options,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            userDefaults.set(bookmark, forKey: bookmarkKey)
+            if let scopeKey = kind.bookmarkUsesSecurityScopeKey {
+                userDefaults.set(usesSecurityScope, forKey: scopeKey)
+            }
+        } catch {
+            userDefaults.removeObject(forKey: bookmarkKey)
+            errorMessage = "Could not remember access to \(kind.title). It may need to be selected again next time. \(error.localizedDescription)"
+        }
+    }
+
+    private func installAsset(kind: SessionAssetKind, url: URL) {
         let asset = SessionAsset(
             kind: kind,
             url: url,
-            state: .customLoaded,
+            state: .inspecting,
             metadata: nil,
             isCustom: true
         )
@@ -460,30 +467,29 @@ public final class EmulatorSession: ObservableObject {
         }
     }
     
-    public func revertAssetToDefault(kind: SessionAssetKind) {
+    public func clearAsset(kind: SessionAssetKind) {
+        if isRunning || isSessionStarting { stopSession() }
+        if let scopedURL = securityScopedAssetURLs.removeValue(forKey: kind) {
+            scopedURL.stopAccessingSecurityScopedResource()
+        }
         userDefaults.removeObject(forKey: kind.userDefaultsKey)
-        loadDefaultAsset(kind: kind)
-        
-        guard let defaultURL = assets[kind]?.fileURL else { return }
-        
-        switch kind {
-        case .pcb:
-            self.activePCBURL = defaultURL
-            self.reloadPCB(fileURL: defaultURL)
-            self.startWatchingActivePCB()
-            self.pcbReloadToast = "Reverted PCB to default"
-        case .appFirmware, .bootloader:
-            verifiedBuildManifest = nil
-            hasVerifiedFirmwareForAudit = false
-            auditGPIOPins()
-            if isRunning {
-                self.pcbReloadToast = "Reverted \(kind.title); restarting emulation..."
-                stopSession()
-                startSession()
-            } else {
-                self.statusMessage = "Reverted \(kind.title) to default"
-            }
-        case .rescScript:
+        if let bookmarkKey = kind.bookmarkUserDefaultsKey {
+            userDefaults.removeObject(forKey: bookmarkKey)
+        }
+        if let scopeKey = kind.bookmarkUsesSecurityScopeKey {
+            userDefaults.removeObject(forKey: scopeKey)
+        }
+        assets[kind] = SessionAsset(kind: kind)
+        verifiedBuildManifest = nil
+        hasVerifiedFirmwareForAudit = false
+        if kind == .pcb {
+            pcbFileWatcher.stopWatching()
+            isPCBWatcherActive = false
+            activePCBURL = nil
+            pcbBoard = KiCadBoard()
+            validateActiveBoard()
+        }
+        if kind == .rescScript {
             approvedRescSHA256 = nil
             approvedRescReferences = []
             isRescReviewPresented = false
@@ -491,8 +497,9 @@ public final class EmulatorSession: ObservableObject {
             rescReviewReferenceEvidence = []
             rescReviewText = ""
         }
+        statusMessage = "Select external components before starting Renode."
     }
-    
+
     public func reloadAsset(kind: SessionAssetKind) {
         guard let asset = assets[kind], let url = asset.fileURL else { return }
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -540,9 +547,9 @@ public final class EmulatorSession: ObservableObject {
         revealAssetInFinder(kind: .pcb)
     }
     
-    public func loadEmbeddedDefaults() {
+    public func clearAssetSelections() {
         for kind in SessionAssetKind.allCases {
-            revertAssetToDefault(kind: kind)
+            clearAsset(kind: kind)
         }
     }
     
@@ -836,6 +843,11 @@ public final class EmulatorSession: ObservableObject {
 
     public func startSession() {
         guard startupTask == nil, !isSessionStarting, !isRunning else { return }
+        guard canStartSession else {
+            errorMessage = "Select a readable external PCB, application firmware, and MCUboot bootloader before starting Renode."
+            statusMessage = "Component selection required"
+            return
+        }
         errorMessage = nil
         isFirmwareReady = false
         isBridgeReady = false
@@ -863,56 +875,16 @@ public final class EmulatorSession: ObservableObject {
             return
         }
         
-        let workspace = customWorkspaceURL ?? Self.discoverWorkspaceRoot()
-        if customWorkspaceURL == nil { customWorkspaceURL = workspace }
-        let builtApp = workspace?.appendingPathComponent("build/renode-app/app.signed.bin")
-        let builtBootloader = workspace?.appendingPathComponent("build/renode-app/mcuboot.elf")
-        let requestedApp = assets[.appFirmware]?.isCustom == true ? assets[.appFirmware]?.fileURL : nil
-        let requestedBootloader = assets[.bootloader]?.isCustom == true ? assets[.bootloader]?.fileURL : nil
-        let usesWorkspaceBuild = requestedApp == nil || requestedApp?.standardizedFileURL == builtApp?.standardizedFileURL
-        let appBinURL: URL
-        let bootloaderURL: URL?
-        verifiedBuildManifest = nil
-        hasVerifiedFirmwareForAudit = false
+        guard canStartSession,
+              let appBinURL = assets[.appFirmware]?.fileURL,
+              let selectedBootloader = assets[.bootloader]?.fileURL else { return }
+        let bootloaderURL: URL? = selectedBootloader
+        verifiedBuildManifest = await Self.verifyFirmware(image: appBinURL, bootloader: selectedBootloader)
+        hasVerifiedFirmwareForAudit = verifiedBuildManifest != nil
         auditGPIOPins()
-        if usesWorkspaceBuild {
-            guard let builtApp, let builtBootloader,
-                  let manifest = await Self.verifyFirmware(image: builtApp, bootloader: builtBootloader) else {
-                guard !Task.isCancelled else { return }
-                self.errorMessage = nil
-                self.statusMessage = "Firmware is not built yet. Choose Configure & Validate or Build & Run to continue."
-                return
-            }
-            guard !Task.isCancelled else { return }
-            if let requestedBootloader, requestedBootloader.standardizedFileURL != builtBootloader.standardizedFileURL {
-                self.errorMessage = "Selected MCUboot does not match the workspace application manifest. Use Build & Run or select a matching pair."
-                self.statusMessage = "Firmware verification required"
-                return
-            }
-            appBinURL = builtApp
-            bootloaderURL = builtBootloader
-            verifiedBuildManifest = manifest
-            hasVerifiedFirmwareForAudit = true
-            auditGPIOPins()
-
-        } else {
-            guard let requestedApp, let requestedBootloader else {
-                self.errorMessage = "Custom application firmware must be paired with an explicitly selected MCUboot image."
-                self.statusMessage = "Firmware pair required"
-                return
-            }
-            appBinURL = requestedApp
-            bootloaderURL = requestedBootloader
-            if let manifest = await Self.verifyFirmware(image: requestedApp, bootloader: requestedBootloader) {
-                guard !Task.isCancelled else { return }
-                verifiedBuildManifest = manifest
-                hasVerifiedFirmwareForAudit = true
-                auditGPIOPins()
-            }
-        }
         guard !Task.isCancelled else { return }
         let ssd1306CsURL = ResourceLoader.url(forResource: "F91SSD1306", withExtension: "cs")
-        let pcbURL = assets[.pcb]?.fileURL ?? customPCBURL ?? ResourceLoader.url(forResource: "f91_jepler", withExtension: "kicad_pcb")
+        let pcbURL = assets[.pcb]?.fileURL
         let rescURL = (assets[.rescScript]?.isCustom == true ? assets[.rescScript]?.fileURL : nil) ?? customRescURL
         if let rescURL, (assets[.rescScript]?.isCustom == true || customRescURL != nil) {
             guard let approvedRescSHA256,
