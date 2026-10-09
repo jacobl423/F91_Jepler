@@ -2,6 +2,9 @@ import Foundation
 import CoreGraphics
 
 public enum PCBViewportLayout {
+    public static let minimumZoom: CGFloat = 0.1
+    public static let maximumZoom: CGFloat = 40
+
     public static func fittedZoom(boardWidthMm: Double, boardHeightMm: Double, canvasSize: CGSize, inset: CGFloat = 36) -> CGFloat? {
         guard boardWidthMm.isFinite, boardHeightMm.isFinite,
               boardWidthMm > 0, boardHeightMm > 0,
@@ -10,7 +13,31 @@ public enum PCBViewportLayout {
         let zoom = min((canvasSize.width - inset * 2) / CGFloat(boardWidthMm),
                        (canvasSize.height - inset * 2) / CGFloat(boardHeightMm))
         guard zoom.isFinite, zoom > 0 else { return nil }
-        return min(40, zoom)
+        return min(maximumZoom, zoom)
+    }
+
+    public static func zoomed(
+        scale: CGFloat,
+        factor: CGFloat,
+        around point: CGPoint,
+        canvasSize: CGSize,
+        panOffset: CGSize
+    ) -> (scale: CGFloat, panOffset: CGSize)? {
+        guard scale.isFinite, scale > 0,
+              factor.isFinite, factor > 0,
+              point.x.isFinite, point.y.isFinite,
+              canvasSize.width.isFinite, canvasSize.height.isFinite,
+              panOffset.width.isFinite, panOffset.height.isFinite else { return nil }
+
+        let newScale = min(maximumZoom, max(minimumZoom, scale * factor))
+        let scaleRatio = newScale / scale
+        let centerX = canvasSize.width / 2
+        let centerY = canvasSize.height / 2
+        let newOffset = CGSize(
+            width: point.x - centerX - (point.x - centerX - panOffset.width) * scaleRatio,
+            height: point.y - centerY - (point.y - centerY - panOffset.height) * scaleRatio
+        )
+        return (newScale, newOffset)
     }
 
     public static func showsFootprintLabel(zoom: CGFloat, isCritical: Bool, isSelected: Bool, isHovered: Bool) -> Bool {
