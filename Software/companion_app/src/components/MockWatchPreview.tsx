@@ -25,7 +25,8 @@ export const MockWatchPreview: React.FC<MockWatchPreviewProps> = ({
       return (bleClient as any).getWatchState();
     }
     return {
-      clockTime: 1700000000,
+      clockTime: 0,
+      clockValid: false,
       clockTimezone: -300,
       clockTimeMode: 0,
       clockDst: 0,
@@ -128,7 +129,7 @@ export const MockWatchPreview: React.FC<MockWatchPreviewProps> = ({
                 <div className="flex justify-between items-center text-xs font-bold tracking-wider px-1">
                   <div className="flex items-center gap-1.5">
                     <span data-testid="watch-day-of-week" className="font-extrabold">
-                      {dayOfWeekStr}
+                      {watchState.clockValid ? dayOfWeekStr : '--'}
                     </span>
                     {isConnected && (
                       <span
@@ -151,7 +152,7 @@ export const MockWatchPreview: React.FC<MockWatchPreviewProps> = ({
                       </span>
                     )}
                     <span data-testid="watch-day-of-month" className="font-extrabold text-sm">
-                      {dayOfMonthStr}
+                      {watchState.clockValid ? dayOfMonthStr : '--'}
                     </span>
                   </div>
                 </div>
@@ -166,7 +167,7 @@ export const MockWatchPreview: React.FC<MockWatchPreviewProps> = ({
                       </span>
                     ) : (
                       <span data-testid="watch-mode-indicator" className="font-black">
-                        {ampmIndicator}
+                        {watchState.clockValid ? ampmIndicator : ''}
                       </span>
                     )}
                   </div>
@@ -177,13 +178,13 @@ export const MockWatchPreview: React.FC<MockWatchPreviewProps> = ({
                       data-testid="watch-time-display"
                       className="text-3xl sm:text-4xl font-extrabold tracking-tighter"
                     >
-                      {displayHours}:{minutes}
+                      {watchState.clockValid ? `${displayHours}:${minutes}` : 'Set time'}
                     </span>
                     <span
                       data-testid="watch-seconds-display"
                       className="text-xl sm:text-2xl font-extrabold ml-0.5"
                     >
-                      {seconds}
+                      {watchState.clockValid ? seconds : ''}
                     </span>
                   </div>
                 </div>

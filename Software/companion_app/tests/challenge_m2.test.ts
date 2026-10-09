@@ -21,7 +21,7 @@ import {
   CLOCK_TIMEMODE_CHAR_UUID,
   CLOCK_DST_CHAR_UUID,
   CLOCK_PAYLOAD_LENGTHS,
-  BT_ATT_ERR_INVALID_OFFSET,
+  BT_ATT_ERR_INVALID_ATTRIBUTE_LEN,
   TIME_MODE,
   DST_MODE,
   F91_DEVICE_NAME,
@@ -38,7 +38,7 @@ describe('Challenger M2 Empirical Adversarial Stress Suite', () => {
       expect(CLOCK_PAYLOAD_LENGTHS.TIMEZONE).toBe(2);
       expect(CLOCK_PAYLOAD_LENGTHS.TIMEMODE).toBe(1);
       expect(CLOCK_PAYLOAD_LENGTHS.DST).toBe(1);
-      expect(BT_ATT_ERR_INVALID_OFFSET).toBe(0x07);
+      expect(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN).toBe(0x0d);
     });
 
     it('matches Zephyr firmware mode enumerations', () => {
@@ -277,50 +277,50 @@ describe('Challenger M2 Empirical Adversarial Stress Suite', () => {
       await mock.connect(deviceId);
     });
 
-    it('strictly validates write lengths conforming to Zephyr BT_ATT_ERR_INVALID_OFFSET (0x07)', async () => {
+    it('strictly validates write lengths conforming to Zephyr BT_ATT_ERR_INVALID_ATTRIBUTE_LEN (0x0d)', async () => {
       // 0 bytes, 3 bytes, 5 bytes for Time
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIME_CHAR_UUID, new Uint8Array(0))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIME_CHAR_UUID, new Uint8Array([1, 2, 3]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIME_CHAR_UUID, new Uint8Array([1, 2, 3, 4, 5]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       // 0 bytes, 1 byte, 3 bytes for Timezone
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIMEZONE_CHAR_UUID, new Uint8Array(0))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIMEZONE_CHAR_UUID, new Uint8Array([1]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIMEZONE_CHAR_UUID, new Uint8Array([1, 2, 3]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       // 0 bytes, 2 bytes for Time Mode
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIMEMODE_CHAR_UUID, new Uint8Array(0))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_TIMEMODE_CHAR_UUID, new Uint8Array([1, 2]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       // 0 bytes, 2 bytes for DST
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_DST_CHAR_UUID, new Uint8Array(0))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
 
       await expect(
         mock.writeCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_DST_CHAR_UUID, new Uint8Array([1, 2]))
-      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)}`));
+      ).rejects.toThrow(new RegExp(`0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)}`));
     });
 
     it('enforces memory isolation: mutating caller buffers after write does not corrupt GATT database or writeHistory', async () => {

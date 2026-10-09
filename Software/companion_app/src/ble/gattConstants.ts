@@ -26,7 +26,7 @@ export const CLOCK_TIME_CHAR_UUID = 'fa35b2f1-7989-11eb-9439-0242ac130002';
 
 /**
  * Clock Timezone Characteristic UUID (128-bit)
- * 2-byte signed int16 little-endian offset in minutes from UTC (two's complement).
+ * 2-byte signed int16 little-endian effective offset in minutes from UTC (already includes DST) (two's complement).
  * Readable & Writable.
  */
 export const CLOCK_TIMEZONE_CHAR_UUID = 'fa35b2f2-7989-11eb-9439-0242ac130002';
@@ -40,10 +40,13 @@ export const CLOCK_TIMEMODE_CHAR_UUID = 'fa35b2f3-7989-11eb-9439-0242ac130002';
 
 /**
  * Clock Daylight Saving Time (DST) Characteristic UUID (128-bit)
- * 1-byte uint8: 0 = Standard Time, 1 = Daylight Saving Time active.
+ * 1-byte uint8 metadata: 0 = Standard Time, 1 = DST active; never adds an hour.
  * Readable & Writable.
  */
 export const CLOCK_DST_CHAR_UUID = 'fa35b2f4-7989-11eb-9439-0242ac130002';
+
+/** Read-only byte: bit 0 means synchronized time is valid; remaining bits zero. */
+export const CLOCK_STATUS_CHAR_UUID = 'fa35b2f5-7989-11eb-9439-0242ac130002';
 
 /**
  * F91 Notification Service UUID (128-bit, advertised in scan response)
@@ -73,3 +76,6 @@ export const DST_MODE = {
 
 /** Zephyr ATT Protocol Error Code returned on invalid payload size or offset */
 export const BT_ATT_ERR_INVALID_OFFSET = 0x07;
+
+/** ATT error for invalid attribute payload length. */
+export const BT_ATT_ERR_INVALID_ATTRIBUTE_LEN = 0x0d;

@@ -4,7 +4,7 @@
  * Implements BleClientInterface for testing, prototyping, and automated CI verification.
  * Accurately simulates the Zephyr RTOS clock_service.c GATT server:
  * - In-memory GATT database
- * - Strict length validation (4B, 2B, 1B, 1B) returning BT_ATT_ERR_INVALID_OFFSET (0x07) on mismatch
+ * - Strict length validation (4B, 2B, 1B, 1B) returning BT_ATT_ERR_INVALID_ATTRIBUTE_LEN (0x0d) on mismatch
  * - Real-time simulated watch clock state
  * - Programmable fault injection (link loss, write failure, connection rejection)
  * - Chronological write history logging
@@ -22,8 +22,9 @@ import {
   CLOCK_TIMEZONE_CHAR_UUID,
   CLOCK_TIMEMODE_CHAR_UUID,
   CLOCK_DST_CHAR_UUID,
+  CLOCK_STATUS_CHAR_UUID,
   CLOCK_PAYLOAD_LENGTHS,
-  BT_ATT_ERR_INVALID_OFFSET,
+  BT_ATT_ERR_INVALID_ATTRIBUTE_LEN,
 } from './gattConstants';
 import {
   deserializeTime,
@@ -37,6 +38,7 @@ import {
 } from './gattSerializer';
 
 export interface SimulatedWatchState {
+  clockValid: boolean;
   clockTime: number; // Unix epoch seconds
   clockTimezone: number; // Minutes from UTC
   clockTimeMode: number; // 0 for 12h, 1 for 24h
@@ -70,11 +72,14 @@ export class MockBleService implements BleClientInterface {
 
   /** Simulated internal watch clock registers */
   private watchState: SimulatedWatchState = {
-    clockTime: 1700000000,
+    clockTime: 0,
+    clockValid: false,
     clockTimezone: -300,
     clockTimeMode: 0,
     clockDst: 0,
   };
+
+  private clockAnchorMs = performance.now();
 
   /** In-memory GATT characteristic value store */
   private gattDatabase: Map<string, Uint8Array> = new Map();
@@ -95,10 +100,11 @@ export class MockBleService implements BleClientInterface {
    * Syncs raw byte buffers in GATT database to match current watchState.
    */
   private syncGattDatabaseFromState(): void {
-    this.gattDatabase.set(CLOCK_TIME_CHAR_UUID, serializeTime(this.watchState.clockTime));
+    this.gattDatabase.set(CLOCK_TIME_CHAR_UUID, serializeTime(this.getWatchState().clockTime));
     this.gattDatabase.set(CLOCK_TIMEZONE_CHAR_UUID, serializeTimezone(this.watchState.clockTimezone));
     this.gattDatabase.set(CLOCK_TIMEMODE_CHAR_UUID, serializeTimeMode(this.watchState.clockTimeMode));
     this.gattDatabase.set(CLOCK_DST_CHAR_UUID, serializeDst(this.watchState.clockDst));
+    this.gattDatabase.set(CLOCK_STATUS_CHAR_UUID, new Uint8Array([this.watchState.clockValid ? 1 : 0]));
   }
 
   // --- BleClientInterface Implementation ---
@@ -173,6 +179,10 @@ export class MockBleService implements BleClientInterface {
       await new Promise((resolve) => setTimeout(resolve, this.writeLatencyMs));
     }
 
+    if (this.connectedDeviceId !== deviceId) {
+      throw new Error(`Device is not connected: ${deviceId}`);
+    }
+
     if (
       this.nextWriteError &&
       (!this.nextWriteError.charUuid ||
@@ -194,31 +204,39 @@ export class MockBleService implements BleClientInterface {
     if (lowerChar === CLOCK_TIME_CHAR_UUID.toLowerCase()) {
       if (data.byteLength !== CLOCK_PAYLOAD_LENGTHS.TIME) {
         throw new Error(
-          `GATT Error 0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)} (BT_ATT_ERR_INVALID_OFFSET): invalid Time payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIME}`
+          `GATT Error 0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)} (BT_ATT_ERR_INVALID_ATTRIBUTE_LEN): invalid Time payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIME}`
         );
       }
       this.watchState.clockTime = deserializeTime(data);
+      this.clockAnchorMs = performance.now();
+      this.watchState.clockValid = true;
     } else if (lowerChar === CLOCK_TIMEZONE_CHAR_UUID.toLowerCase()) {
       if (data.byteLength !== CLOCK_PAYLOAD_LENGTHS.TIMEZONE) {
         throw new Error(
-          `GATT Error 0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)} (BT_ATT_ERR_INVALID_OFFSET): invalid Timezone payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIMEZONE}`
+          `GATT Error 0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)} (BT_ATT_ERR_INVALID_ATTRIBUTE_LEN): invalid Timezone payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIMEZONE}`
         );
       }
-      this.watchState.clockTimezone = deserializeTimezone(data);
+      const offset = deserializeTimezone(data);
+      if (offset < -840 || offset > 840) throw new Error("GATT Error 0x13 (BT_ATT_ERR_VALUE_NOT_ALLOWED): timezone out of range");
+      this.watchState.clockTimezone = offset;
     } else if (lowerChar === CLOCK_TIMEMODE_CHAR_UUID.toLowerCase()) {
       if (data.byteLength !== CLOCK_PAYLOAD_LENGTHS.TIMEMODE) {
         throw new Error(
-          `GATT Error 0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)} (BT_ATT_ERR_INVALID_OFFSET): invalid Time Mode payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIMEMODE}`
+          `GATT Error 0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)} (BT_ATT_ERR_INVALID_ATTRIBUTE_LEN): invalid Time Mode payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.TIMEMODE}`
         );
       }
+      if (data[0] > 1) throw new Error("GATT Error 0x13 (BT_ATT_ERR_VALUE_NOT_ALLOWED): invalid time mode");
       this.watchState.clockTimeMode = deserializeTimeMode(data) ? 1 : 0;
     } else if (lowerChar === CLOCK_DST_CHAR_UUID.toLowerCase()) {
       if (data.byteLength !== CLOCK_PAYLOAD_LENGTHS.DST) {
         throw new Error(
-          `GATT Error 0x${BT_ATT_ERR_INVALID_OFFSET.toString(16)} (BT_ATT_ERR_INVALID_OFFSET): invalid DST payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.DST}`
+          `GATT Error 0x${BT_ATT_ERR_INVALID_ATTRIBUTE_LEN.toString(16)} (BT_ATT_ERR_INVALID_ATTRIBUTE_LEN): invalid DST payload length ${data.byteLength}, expected ${CLOCK_PAYLOAD_LENGTHS.DST}`
         );
       }
+      if (data[0] > 1) throw new Error("GATT Error 0x13 (BT_ATT_ERR_VALUE_NOT_ALLOWED): invalid DST metadata");
       this.watchState.clockDst = deserializeDst(data) ? 1 : 0;
+    } else if (lowerChar === CLOCK_STATUS_CHAR_UUID) {
+      throw new Error("GATT Error 0x03 (BT_ATT_ERR_WRITE_NOT_PERMITTED): clock status is read-only");
     } else {
       throw new Error(`Unknown characteristic UUID: ${characteristicUuid}`);
     }
@@ -249,6 +267,7 @@ export class MockBleService implements BleClientInterface {
       throw new Error(`Unknown service UUID: ${serviceUuid}`);
     }
 
+    this.syncGattDatabaseFromState();
     const val = this.gattDatabase.get(characteristicUuid.toLowerCase());
     if (!val) {
       throw new Error(`Characteristic not found: ${characteristicUuid}`);
@@ -285,14 +304,18 @@ export class MockBleService implements BleClientInterface {
    * Returns current internal clock registers of the simulated watch.
    */
   getWatchState(): Readonly<SimulatedWatchState> {
-    return { ...this.watchState };
+    return { ...this.watchState, clockTime: this.watchState.clockValid
+      ? (this.watchState.clockTime + Math.floor((performance.now() - this.clockAnchorMs) / 1000)) >>> 0
+      : 0 };
   }
 
   /**
    * Sets current internal clock registers of the simulated watch.
    */
   setWatchState(state: Partial<SimulatedWatchState>): void {
-    this.watchState = { ...this.watchState, ...state };
+    this.watchState = { ...this.getWatchState(), ...state };
+    if (state.clockTime !== undefined && state.clockValid === undefined) this.watchState.clockValid = true;
+    this.clockAnchorMs = performance.now();
     this.syncGattDatabaseFromState();
   }
 
@@ -314,6 +337,7 @@ export class MockBleService implements BleClientInterface {
    * Returns the raw byte buffer currently stored in the simulated GATT database for a characteristic.
    */
   getCharacteristicValue(charUuid: string): Uint8Array | undefined {
+    this.syncGattDatabaseFromState();
     const val = this.gattDatabase.get(charUuid.toLowerCase());
     return val ? new Uint8Array(val) : undefined;
   }
@@ -379,7 +403,8 @@ export class MockBleService implements BleClientInterface {
     this.writeLatencyMs = 0;
     this.writeHistory = [];
     this.watchState = {
-      clockTime: 1700000000,
+      clockTime: 0,
+      clockValid: false,
       clockTimezone: -300,
       clockTimeMode: 0,
       clockDst: 0,

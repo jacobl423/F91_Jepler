@@ -271,7 +271,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIME_CHAR_UUID,
           new Uint8Array([0, 1, 2])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
 
       // 5 bytes
       await expect(
@@ -281,7 +281,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIME_CHAR_UUID,
           new Uint8Array([0, 1, 2, 3, 4])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
     });
 
     it('rejects Timezone characteristic write with invalid length (not 2 bytes)', async () => {
@@ -293,7 +293,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIMEZONE_CHAR_UUID,
           new Uint8Array([0])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
 
       // 3 bytes
       await expect(
@@ -303,7 +303,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIMEZONE_CHAR_UUID,
           new Uint8Array([0, 1, 2])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
     });
 
     it('rejects Time Mode characteristic write with invalid length (not 1 byte)', async () => {
@@ -314,7 +314,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIMEMODE_CHAR_UUID,
           new Uint8Array(0)
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
 
       await expect(
         mockBle.writeCharacteristic(
@@ -323,7 +323,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_TIMEMODE_CHAR_UUID,
           new Uint8Array([1, 2])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
     });
 
     it('rejects DST characteristic write with invalid length (not 1 byte)', async () => {
@@ -334,7 +334,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_DST_CHAR_UUID,
           new Uint8Array(0)
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
 
       await expect(
         mockBle.writeCharacteristic(
@@ -343,7 +343,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
           CLOCK_DST_CHAR_UUID,
           new Uint8Array([0, 1])
         )
-      ).rejects.toThrow(/BT_ATT_ERR_INVALID_OFFSET/);
+      ).rejects.toThrow(/BT_ATT_ERR_INVALID_ATTRIBUTE_LEN/);
     });
 
     it('rejects write when disconnected or targeting unknown UUIDs', async () => {
@@ -428,7 +428,7 @@ describe('MockBleService Engine & GATT Server Simulation Tests', () => {
       mockBle.failNextConnection('err');
       mockBle.reset();
 
-      expect(mockBle.getWatchState().clockTime).toBe(1700000000);
+      expect(mockBle.getWatchState().clockTime).toBe(0);
       expect(mockBle.getWriteHistory().length).toBe(0);
     });
   });

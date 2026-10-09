@@ -17,11 +17,11 @@ import {
 export interface ClockSyncData {
   /** Unix epoch timestamp in seconds */
   timestamp: number;
-  /** Signed timezone offset in minutes from UTC (e.g., -300 for UTC-5 EST) */
+  /** Effective signed timezone offset in minutes from UTC, including DST (e.g., -300 for UTC-5 EST) */
   timezoneOffsetMinutes: number;
   /** Display format: false for 12-hour, true for 24-hour */
   is24Hour: boolean;
-  /** Daylight Saving Time active status: false for Standard, true for DST */
+  /** Descriptive Daylight Saving Time status (never adds an hour): false for Standard, true for DST */
   isDst: boolean;
 }
 

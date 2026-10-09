@@ -414,10 +414,11 @@ describe('Milestone 4: UI Components & Visual Synchronization Panel', () => {
       expect(screen.getByTestId('watch-ble-indicator')).toBeTruthy();
     });
 
-    it('renders 12-hour AM/PM indicator when clockTimeMode is 0', () => {
+    it('renders 12-hour AM/PM indicator for a synchronized clock', () => {
       const mockBle = new MockBleService();
       mockBle.setWatchState({
         clockTimeMode: 0,
+        clockTime: 1700000000,
         clockDst: 0,
       });
 

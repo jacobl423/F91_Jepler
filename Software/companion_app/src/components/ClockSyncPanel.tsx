@@ -188,7 +188,7 @@ export const ClockSyncPanel: React.FC<ClockSyncPanelProps> = ({
                 : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
             }`}
             data-testid="toggle-dst"
-            aria-label={`Toggle DST, currently ${isDst ? 'active' : 'standard'}`}
+            aria-label={`Toggle DST metadata (does not change offset), currently ${isDst ? 'active' : 'standard'}`}
           >
             {isDst ? <Sun className="w-3 h-3 text-amber-400" /> : <Moon className="w-3 h-3 text-slate-400" />}
             <span data-testid="dst-status">{isDst ? 'DST Active' : 'Standard Time'}</span>
@@ -196,6 +196,7 @@ export const ClockSyncPanel: React.FC<ClockSyncPanelProps> = ({
         </div>
       </div>
 
+      <p className="text-xs text-slate-400 mt-2">The UTC offset already includes daylight saving. The DST flag is descriptive only.</p>
       {/* Progress Bar (Visible during active sync) */}
       {isSyncing && (
         <div className="mt-3 p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30" data-testid="sync-progress-container">

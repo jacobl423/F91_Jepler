@@ -1,0 +1,149 @@
+{
+  "cases": [
+    {
+      "name": "chicago-summer",
+      "utc": 1782907200,
+      "offsetMinutes": -300,
+      "dst": 1,
+      "elapsedSeconds": 5,
+      "expectedUtc": 1782907205,
+      "expectedLocalSeconds": 25205,
+      "timeBytes": [
+        64,
+        1,
+        69,
+        106
+      ],
+      "timezoneBytes": [
+        212,
+        254
+      ]
+    },
+    {
+      "name": "chicago-winter",
+      "utc": 1767268800,
+      "offsetMinutes": -360,
+      "dst": 0,
+      "elapsedSeconds": 0,
+      "expectedUtc": 1767268800,
+      "expectedLocalSeconds": 21600,
+      "timeBytes": [
+        192,
+        97,
+        86,
+        105
+      ],
+      "timezoneBytes": [
+        152,
+        254
+      ]
+    },
+    {
+      "name": "india-fractional",
+      "utc": 1767297600,
+      "offsetMinutes": 330,
+      "dst": 0,
+      "elapsedSeconds": 60,
+      "expectedUtc": 1767297660,
+      "expectedLocalSeconds": 5460,
+      "timeBytes": [
+        64,
+        210,
+        86,
+        105
+      ],
+      "timezoneBytes": [
+        74,
+        1
+      ]
+    },
+    {
+      "name": "nepal-fractional",
+      "utc": 1767297600,
+      "offsetMinutes": 345,
+      "dst": 0,
+      "elapsedSeconds": 0,
+      "expectedUtc": 1767297600,
+      "expectedLocalSeconds": 6300,
+      "timeBytes": [
+        64,
+        210,
+        86,
+        105
+      ],
+      "timezoneBytes": [
+        89,
+        1
+      ]
+    },
+    {
+      "name": "midnight-rollover",
+      "utc": 1782968399,
+      "offsetMinutes": -300,
+      "dst": 1,
+      "elapsedSeconds": 2,
+      "expectedUtc": 1782968401,
+      "expectedLocalSeconds": 1,
+      "timeBytes": [
+        79,
+        240,
+        69,
+        106
+      ],
+      "timezoneBytes": [
+        212,
+        254
+      ]
+    }
+  ],
+  "invalidWrites": [
+    {
+      "field": "time",
+      "bytes": []
+    },
+    {
+      "field": "time",
+      "bytes": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "field": "timezone",
+      "bytes": [
+        1
+      ]
+    },
+    {
+      "field": "timemode",
+      "bytes": []
+    },
+    {
+      "field": "dst",
+      "bytes": [
+        0,
+        1
+      ]
+    },
+    {
+      "field": "timezone",
+      "bytes": [
+        73,
+        3
+      ]
+    },
+    {
+      "field": "timemode",
+      "bytes": [
+        2
+      ]
+    },
+    {
+      "field": "dst",
+      "bytes": [
+        2
+      ]
+    }
+  ]
+}

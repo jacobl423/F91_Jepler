@@ -409,7 +409,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
         expect(steps[steps.length - 1].percent).toBe(100);
       });
 
-      it('F7-4: updates simulated watch state registers atomically on sync completion', async () => {
+      it('F7-4: updates simulated watch registers through sequential writes', async () => {
         const targetDate = new Date('2026-10-05T12:30:00Z');
         await syncClock('F91-WATCH-SIM-01', mockBle, {
           date: targetDate,
@@ -737,7 +737,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
         await mockBle.connect('F91-WATCH-SIM-01');
       });
 
-      it('B4-1: MockBleService rejects write to Time characteristic with 3 bytes (BT_ATT_ERR_INVALID_OFFSET 0x7)', async () => {
+      it('B4-1: MockBleService rejects write to Time characteristic with 3 bytes (BT_ATT_ERR_INVALID_ATTRIBUTE_LEN 0xd)', async () => {
         await expect(
           mockBle.writeCharacteristic(
             'F91-WATCH-SIM-01',
@@ -745,7 +745,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIME_CHAR_UUID,
             new Uint8Array(3)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-2: MockBleService rejects write to Time characteristic with 5 bytes', async () => {
@@ -756,7 +756,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIME_CHAR_UUID,
             new Uint8Array(5)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-3: MockBleService rejects write to Timezone characteristic with 1 byte', async () => {
@@ -767,7 +767,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIMEZONE_CHAR_UUID,
             new Uint8Array(1)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-4: MockBleService rejects write to Timezone characteristic with 3 bytes', async () => {
@@ -778,7 +778,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIMEZONE_CHAR_UUID,
             new Uint8Array(3)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-5: MockBleService rejects write to Time Mode characteristic with 0 bytes', async () => {
@@ -789,7 +789,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIMEMODE_CHAR_UUID,
             new Uint8Array(0)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-6: MockBleService rejects write to Time Mode characteristic with 2 bytes', async () => {
@@ -800,7 +800,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_TIMEMODE_CHAR_UUID,
             new Uint8Array(2)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-7: MockBleService rejects write to DST characteristic with 0 bytes', async () => {
@@ -811,7 +811,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_DST_CHAR_UUID,
             new Uint8Array(0)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-8: MockBleService rejects write to DST characteristic with 2 bytes', async () => {
@@ -822,7 +822,7 @@ describe('E2E Integration Test Suite: F91_Jepler Companion App', () => {
             CLOCK_DST_CHAR_UUID,
             new Uint8Array(2)
           )
-        ).rejects.toThrow(/0x7 \(BT_ATT_ERR_INVALID_OFFSET\)/);
+        ).rejects.toThrow(/0xd \(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN\)/);
       });
 
       it('B4-9: MockBleService rejects write to unknown characteristic UUID', async () => {

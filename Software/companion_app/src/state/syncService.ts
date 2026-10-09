@@ -22,6 +22,7 @@ import {
   CLOCK_TIMEZONE_CHAR_UUID,
   CLOCK_TIMEMODE_CHAR_UUID,
   CLOCK_DST_CHAR_UUID,
+  CLOCK_STATUS_CHAR_UUID,
 } from '../ble/gattConstants';
 import {
   ClockSyncData,
@@ -90,6 +91,7 @@ export interface SyncResult {
  * Base error class for clock synchronization failures.
  */
 export class SyncError extends Error {
+  stepsCompleted = 0;
   constructor(message: string) {
     super(message);
     this.name = 'SyncError';
@@ -239,7 +241,29 @@ export async function syncClock(
     }
   };
 
+  let stepsCompleted = 0;
   try {
+    // Reading the new status characteristic gates the effective-offset protocol.
+    if (!bleClient.readCharacteristic) throw new SyncError("BLE driver must support reading clock status before synchronization.");
+    let clockStatus: Uint8Array;
+    try {
+      clockStatus = await withTimeout(
+        bleClient.readCharacteristic(deviceId, CLOCK_SERVICE_UUID, CLOCK_STATUS_CHAR_UUID),
+        timeoutMs, 'Timed out checking clock protocol', CLOCK_STATUS_CHAR_UUID);
+    } catch (err) {
+      await verifyLinkAlive('checking clock protocol');
+      if (err instanceof SyncTimeoutError) throw err;
+      const reason = err instanceof Error ? err.message : String(err);
+      // Do not label transport/permission failures as unsupported firmware.
+      if (/not found|unknown characteristic|unsupported|does not exist/i.test(reason)) {
+        throw new SyncError('Watch firmware update required: clock status is unavailable. No clock fields were written.');
+      }
+      throw new SyncGattError(`Could not verify clock compatibility: ${reason}. No clock fields were written.`, CLOCK_STATUS_CHAR_UUID, err);
+    }
+    if (clockStatus.length !== 1 || (clockStatus[0] & 0xfe) !== 0) {
+      throw new SyncError('Watch firmware update required: unsupported clock status format. No clock fields were written.');
+    }
+    await verifyLinkAlive('after checking clock protocol');
     options.onProgress?.({
       step: 'IDLE',
       percent: 0,
@@ -280,6 +304,8 @@ export async function syncClock(
       );
     }
 
+    stepsCompleted++;
+
     // --- STEP 2: Write Timezone (2 bytes LE int16) ---
     await verifyLinkAlive('before Timezone write');
     options.onProgress?.({
@@ -313,6 +339,8 @@ export async function syncClock(
         err
       );
     }
+
+    stepsCompleted++;
 
     // --- STEP 3: Write Time Mode (1 byte uint8) ---
     await verifyLinkAlive('before Time Mode write');
@@ -348,6 +376,8 @@ export async function syncClock(
       );
     }
 
+    stepsCompleted++;
+
     // --- STEP 4: Write DST (1 byte uint8) ---
     await verifyLinkAlive('before DST write');
     options.onProgress?.({
@@ -382,6 +412,8 @@ export async function syncClock(
       );
     }
 
+    stepsCompleted++;
+
     // Final link verification
     await verifyLinkAlive('after completing all writes');
 
@@ -411,6 +443,13 @@ export async function syncClock(
         dst: bytesToHexString(dstBytes),
       },
     };
+  } catch (err) {
+    if (err instanceof SyncError) {
+      err.stepsCompleted = stepsCompleted;
+      if (stepsCompleted > 0) err.message += ` ${stepsCompleted} of 4 writes acknowledged; the watch may be partially updated. Retry sends all four fields.`;
+      else if (err instanceof SyncTimeoutError && err.characteristicUuid !== CLOCK_STATUS_CHAR_UUID) err.message += ' Write outcome may be unknown; retry sends all four fields.';
+    }
+    throw err;
   } finally {
     // Teardown temporary disconnect listener
     if (
