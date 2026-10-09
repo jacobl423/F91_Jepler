@@ -1,0 +1,36 @@
+:name: F91 Jepler Emulator (nRF52840)
+:description: This script runs the Zephyr RTOS firmware for the f91_jepler on a virtual nRF52840.
+
+using sysbus
+$mcuboot_bin?=@bin/mcuboot.elf
+$app_bin?=@bin/app.signed.bin
+$name?="nRF52840"
+mach create $name
+
+# The upstream platform registers its bundled NRF52840_Radio type. Load the
+# project-local variant first and use an otherwise identical platform file to
+# replace only that component, preserving its IRQ wiring and all other models.
+include @Firmware/renode/radio/F91NRF52840Radio.cs
+include @Firmware/renode/nrf52840.repl
+# The built-in NRF52840_RTC timers use an ideal 32768 Hz clock.
+# Zephyr selects LFXO via &lfclk in the application overlay; no extra GPIO oscillator
+# is needed. Renode does not model quartz drift or analog startup behavior.
+include @Firmware/renode/F91SSD1306.cs
+machine LoadPlatformDescriptionFromString "display: Video.F91SSD1306 @ twi0 0x3c { width: 96; height: 39 }"
+
+# Renode's nRF52840 model uses a dummy Tag for FICR.
+# Zephyr's NVMC driver reads FICR to determine flash size.
+# If it returns 0, MCUboot fails to read the flash image.
+# We replace it with MappedMemory and set the size correctly (256 pages * 4096 bytes = 1MB).
+machine LoadPlatformDescriptionFromString "ficr: Memory.MappedMemory @ sysbus 0x10000000 { size: 0x1000 }"
+
+macro reset
+"""
+    sysbus WriteDoubleWord 0x10000010 0x00001000
+    sysbus WriteDoubleWord 0x10000014 0x00000100
+
+    sysbus LoadELF $mcuboot_bin
+    sysbus LoadBinary $app_bin 0x0c000
+"""
+
+runMacro $reset

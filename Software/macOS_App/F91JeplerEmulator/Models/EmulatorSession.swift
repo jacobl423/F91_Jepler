@@ -237,6 +237,7 @@ public final class EmulatorSession: ObservableObject {
     // KiCad Tooling, 3D Render & Live Watcher
     @Published public var activePCBURL: URL? = nil
     @Published public var isPCBWatcherActive: Bool = false
+    @Published public var isSyncingPCB: Bool = false
     @Published public var pcbRender3DImage: NSImage? = nil
     @Published public var isRendering3D: Bool = false
     @Published public var show3DRenderMode: Bool = false
@@ -645,17 +646,38 @@ public final class EmulatorSession: ObservableObject {
                 guard let self = self else { return }
                 self.pcbBoard = board
                 self.validateActiveBoard()
-                
-                self.pcbReloadToast = "Auto-reloaded '\(fileURL.lastPathComponent)' from KiCad"
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    if self.pcbReloadToast?.contains(fileURL.lastPathComponent) == true {
-                        self.pcbReloadToast = nil
-                    }
-                }
-                
                 if self.show3DRenderMode {
                     self.trigger3DRender()
+                }
+            }
+        }
+    }
+
+    public func syncPCBFromKiCad() {
+        guard let fileURL = activePCBURL else {
+            errorMessage = "No PCB file selected to sync from KiCad."
+            return
+        }
+        guard !isSyncingPCB else { return }
+        isSyncingPCB = true
+
+        Task { [weak self] in
+            do {
+                let board = try await KiCadParser.parseAsync(fileURL: fileURL)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.pcbBoard = board
+                    self.validateActiveBoard()
+                    self.isSyncingPCB = false
+                    if self.show3DRenderMode {
+                        self.trigger3DRender()
+                    }
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isSyncingPCB = false
+                    self.errorMessage = "Could not sync \(fileURL.lastPathComponent) from KiCad: \(error.localizedDescription)"
                 }
             }
         }

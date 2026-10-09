@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:F91_Jepler}/Software/macOS_App",
+            "name": "Debug F91JeplerEmulator (Software/macOS_App)",
+            "target": "F91JeplerEmulator",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug F91JeplerEmulator (Software/macOS_App)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:F91_Jepler}/Software/macOS_App",
+            "name": "Release F91JeplerEmulator (Software/macOS_App)",
+            "target": "F91JeplerEmulator",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release F91JeplerEmulator (Software/macOS_App)"
+        }
+    ]
+}

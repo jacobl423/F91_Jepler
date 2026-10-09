@@ -39,6 +39,18 @@ public struct KiCadPcbView: View {
                         .padding(.vertical, 2)
                         .background(Color.black.opacity(0.2))
                         .cornerRadius(4)
+
+                        Button(action: { session.syncPCBFromKiCad() }) {
+                            if session.isSyncingPCB {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Label("Sync from KiCad", systemImage: "arrow.clockwise")
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 10))
+                        .disabled(session.activePCBURL == nil || session.isSyncingPCB)
+                        .help("Reload the active PCB layout from disk")
                     }
                     
                     // Quick Action: Open in KiCad
@@ -86,18 +98,6 @@ public struct KiCadPcbView: View {
                     .font(.system(size: 11))
                     .disabled(session.isExportingGerbers)
                     
-                    // Re-Validate / Manual Reload
-                    Button(action: {
-                        if let url = session.activePCBURL {
-                            session.reloadPCB(fileURL: url)
-                        } else {
-                            session.validateActiveBoard()
-                        }
-                    }) {
-                        Label("Reload", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.system(size: 11))
                 }
                 
                 // Core Mode Tabs
@@ -158,22 +158,6 @@ public struct KiCadPcbView: View {
                 .padding(.vertical, 6)
                 .background(Color.orange.opacity(0.15))
                 .overlay(Rectangle().stroke(Color.orange.opacity(0.3), lineWidth: 1))
-            }
-            
-            // Real-Time Reload Toast Banner
-            if let toast = session.pcbReloadToast {
-                HStack(spacing: 6) {
-                    Image(systemName: "bolt.fill")
-                        .foregroundColor(.green)
-                    Text(toast)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    Spacer()
-                    Button("Dismiss") { session.pcbReloadToast = nil }
-                        .font(.system(size: 9))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.green.opacity(0.18))
             }
             
             Divider()

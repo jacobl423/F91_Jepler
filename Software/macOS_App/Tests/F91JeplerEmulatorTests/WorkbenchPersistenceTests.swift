@@ -51,7 +51,10 @@ final class WorkbenchPersistenceTests: XCTestCase {
 
         let restored = EmulatorSession(userDefaults: defaults)
         for (kind, url) in selectedURLs {
-            XCTAssertEqual(restored.assets[kind]?.fileURL, url)
+            XCTAssertEqual(
+                restored.assets[kind]?.fileURL?.resolvingSymlinksInPath(),
+                url.resolvingSymlinksInPath()
+            )
             XCTAssertTrue(restored.assets[kind]?.isCustom == true)
             XCTAssertNotNil(defaults.data(forKey: kind.bookmarkUserDefaultsKey!))
         }
