@@ -29,10 +29,23 @@ public final class RenodeProcessManager {
                                                object: nil, queue: .main) { [weak self] _ in self?.stop() }
     }
 
+    public static var bundledRenodeExecutable: String? {
+        #if arch(arm64)
+        let architecture = "arm64"
+        #else
+        let architecture = "x86_64"
+        #endif
+        let path = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/Renode/\(architecture)/renode").path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
     public static func findRenodeExecutable(customPath: String? = nil) -> String? {
         if let customPath, !customPath.isEmpty, FileManager.default.isExecutableFile(atPath: customPath) { return customPath }
-        let appPath = "/Applications/Renode.app/Contents/MacOS/renode"
-        if FileManager.default.isExecutableFile(atPath: appPath) { return appPath }
+        if let bundled = bundledRenodeExecutable { return bundled }
+        let locations = ["/Applications/Renode.app/Contents/MacOS/renode",
+                         NSHomeDirectory() + "/Applications/Renode.app/Contents/MacOS/renode",
+                         "/opt/homebrew/bin/renode", "/usr/local/bin/renode"]
+        for path in locations where FileManager.default.isExecutableFile(atPath: path) { return path }
         for directory in (ProcessInfo.processInfo.environment["PATH"] ?? "").components(separatedBy: ":") {
             let candidate = (directory as NSString).appendingPathComponent("renode")
             if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }

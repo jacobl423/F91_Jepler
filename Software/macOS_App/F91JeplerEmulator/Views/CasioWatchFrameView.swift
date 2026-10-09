@@ -69,7 +69,8 @@ public struct CasioWatchFrameView: View {
                         buttonName: "LIGHT",
                         shortcutKey: "1",
                         altKey: "",
-                        isPressed: session.pressedKeys.contains("1") || isACrossProbed,
+                        isPressed: session.pressedKeys.contains("1"),
+                        isSelected: isACrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "1") },
                         onUp: { session.buttonUp(key: "1") },
@@ -85,7 +86,8 @@ public struct CasioWatchFrameView: View {
                         buttonName: "MODE",
                         shortcutKey: "2",
                         altKey: "",
-                        isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
+                        isPressed: session.pressedKeys.contains("2"),
+                        isSelected: isBCrossProbed,
                         isLeft: true,
                         onDown: { session.buttonDown(key: "2") },
                         onUp: { session.buttonUp(key: "2") },
@@ -101,7 +103,8 @@ public struct CasioWatchFrameView: View {
                         buttonName: "TOGGLE",
                         shortcutKey: "3",
                         altKey: "",
-                        isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
+                        isPressed: session.pressedKeys.contains("3"),
+                        isSelected: isCCrossProbed,
                         isLeft: false,
                         onDown: { session.buttonDown(key: "3") },
                         onUp: { session.buttonUp(key: "3") },
@@ -118,7 +121,8 @@ public struct CasioWatchFrameView: View {
                         name: "LIGHT",
                         pin: session.pcbBoard.buttonAPin,
                         hotkey: "1",
-                        isPressed: session.pressedKeys.contains("1") || isACrossProbed,
+                        isPressed: session.pressedKeys.contains("1"),
+                        isSelected: isACrossProbed,
                         isLeft: true,
                         onClick: {
                             session.selectedFootprintID = "Switch1"
@@ -139,7 +143,8 @@ public struct CasioWatchFrameView: View {
                         name: "MODE",
                         pin: session.pcbBoard.buttonBPin,
                         hotkey: "2",
-                        isPressed: session.pressedKeys.contains("2") || isBCrossProbed,
+                        isPressed: session.pressedKeys.contains("2"),
+                        isSelected: isBCrossProbed,
                         isLeft: true,
                         onClick: {
                             session.selectedFootprintID = "Switch2"
@@ -161,7 +166,8 @@ public struct CasioWatchFrameView: View {
                         name: "ALARM / 24H",
                         pin: session.pcbBoard.buttonCPin,
                         hotkey: "3",
-                        isPressed: session.pressedKeys.contains("3") || isCCrossProbed,
+                        isPressed: session.pressedKeys.contains("3"),
+                        isSelected: isCCrossProbed,
                         isLeft: false,
                         onClick: {
                             session.selectedFootprintID = "Switch3"
@@ -192,6 +198,7 @@ struct CasioPushButton: View {
     let shortcutKey: String
     let altKey: String
     let isPressed: Bool
+    let isSelected: Bool
     let isLeft: Bool
     let onDown: () -> Void
     let onUp: () -> Void
@@ -216,7 +223,7 @@ struct CasioPushButton: View {
                     .offset(x: isPressed ? (isLeft ? 3 : -3) : 0) // Visual depression moves inward toward case
                     .overlay(
                         RoundedRectangle(cornerRadius: 5)
-                            .stroke(isPressed ? Color.green : Color(white: 0.3), lineWidth: isPressed ? 2 : 1)
+                            .stroke(isPressed ? Color.green : (isSelected ? Color.yellow : Color(white: 0.3)), lineWidth: (isPressed || isSelected) ? 2 : 1)
                             .offset(x: isPressed ? (isLeft ? 3 : -3) : 0)
                     )
                     .shadow(color: isPressed ? Color.green.opacity(0.6) : Color.black.opacity(0.6), radius: isPressed ? 6 : 4, x: 0, y: 2)
@@ -253,6 +260,7 @@ struct SideButtonControlCard: View {
     let pin: String
     let hotkey: String
     let isPressed: Bool
+    let isSelected: Bool
     let isLeft: Bool
     let onClick: () -> Void
     let onToggleHold: () -> Void
@@ -302,6 +310,7 @@ struct SideButtonControlCard: View {
         }
         .padding(8)
         .frame(width: 120)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isSelected ? Color.yellow.opacity(0.7) : .clear, lineWidth: 1))
         .workbenchGlass(cornerRadius: 12, tint: isPressed ? .green.opacity(0.2) : nil)
     }
 }

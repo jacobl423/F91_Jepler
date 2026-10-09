@@ -24,10 +24,15 @@ let package = Package(
             exclude: [
                 "F91JeplerEmulator.entitlements",
                 "Resources/Info.plist",
-                "Resources/AppIcon.icns"
+                "Resources/AppIcon.icns",
+                "Resources/Embedded/app.signed.bin",
+                "Resources/Embedded/mcuboot.elf",
+                "Resources/Embedded/f91_jepler.kicad_pcb",
+                "Resources/Embedded/f91_jepler.resc"
             ],
             resources: [
-                .copy("Resources/Embedded")
+                .copy("Resources/Embedded/F91SSD1306.cs"),
+                .copy("Resources/Embedded/jepler-icon.png")
             ],
             swiftSettings: swiftSettings
         ),

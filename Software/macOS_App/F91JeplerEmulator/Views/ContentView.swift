@@ -3,6 +3,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 public struct ContentView: View {
+    @AppStorage("jepler.hasSeenEasySetup") private var hasSeenEasySetup = false
     @StateObject private var session = EmulatorSession()
     @StateObject private var firmwareBuild = FirmwareBuildController()
     private let keyboardMonitor = KeyboardMonitor()
@@ -26,7 +27,7 @@ public struct ContentView: View {
                     setupFlowCard
                     workbenchPanel
                 }
-                .frame(minWidth: 320, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 280, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
                 
             } trailing: {
@@ -245,7 +246,8 @@ public struct ContentView: View {
         .onAppear {
             UserDefaults.standard.set(session.isSidebarVisible, forKey: SessionPersistenceKeys.sidebarVisibleAlternate)
             setupKeyboardMonitoring()
-            session.startSession()
+            hasSeenEasySetup = true
+            session.showSetupSheet = true
         }
         .onDisappear {
             keyboardMonitor.stop()
@@ -292,7 +294,7 @@ public struct ContentView: View {
                 } else {
                     let buildFailed = firmwareBuild.status.hasPrefix("Build failed") || firmwareBuild.status.hasPrefix("Build verification failed")
                     let sessionNeedsSetup = session.statusMessage == "Firmware is not built yet. Choose Configure & Validate or Build & Run to continue."
-                    Text(buildFailed ? firmwareBuild.status : (sessionNeedsSetup ? session.statusMessage : (firmwareBuild.status == "Build the current workspace firmware" ? "1. Configure your project folder  ·  2. Build & Run  ·  3. Send a sample notification" : firmwareBuild.status)))
+                    Text(buildFailed ? firmwareBuild.status : (sessionNeedsSetup ? session.statusMessage : (firmwareBuild.status == "Build the current workspace firmware" ? "Choose Easy Setup and select an external PCB, application firmware, and bootloader." : firmwareBuild.status)))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -310,14 +312,14 @@ public struct ContentView: View {
                     .font(.system(size: 10))
                 }
                 HStack(spacing: 8) {
-                    Button(session.errorMessage == nil ? "Configure & Validate" : "Fix Setup") {
+                    Button(session.errorMessage == nil ? "Easy Setup" : "Fix Setup") {
                         session.showSetupSheet = true
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     Button(firmwareBuild.status.hasPrefix("Build failed") || firmwareBuild.status.hasPrefix("Build verification failed") ? "Retry Build & Run" : "Build & Run") {
                         firmwareBuild.buildAndRun(session: session)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .disabled(firmwareBuild.isBuilding || session.isSessionStarting)
                     if firmwareBuild.lastLogURL != nil {
                         Button("Open Build Log") { openBuildLog() }

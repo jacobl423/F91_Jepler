@@ -7,6 +7,10 @@ public enum ResourceLoader {
     private static let cacheLock = NSLock()
 
     public static func url(forResource name: String, withExtension ext: String) -> URL? {
+        // Component files must come from explicit external selections.
+        guard (name == "F91SSD1306" && ext == "cs") || (name == "jepler-icon" && ext == "png") else {
+            return nil
+        }
         let cacheKey = "\(name).\(ext)"
         cacheLock.lock()
         if let cached = urlCache[cacheKey] {
@@ -16,6 +20,7 @@ public enum ResourceLoader {
         cacheLock.unlock()
         
         let foundURL: URL? = {
+
             // 1. Subdirectory "Resources/Embedded"
             if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Resources/Embedded") {
                 return url
@@ -44,6 +49,12 @@ public enum ResourceLoader {
             }
         }
         
+            #if SWIFT_PACKAGE
+            if let url = Bundle.module.url(forResource: name, withExtension: ext) {
+                return url
+            }
+            #endif
+
         // 5. FileSystem relative to current working directory (workspace dev mode)
         let cwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let repoCandidates = [

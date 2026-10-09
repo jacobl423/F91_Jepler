@@ -86,14 +86,14 @@ private struct SidebarHeaderView: View {
             // Revert all to defaults button
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.15)) {
-                    session.loadEmbeddedDefaults()
+                    session.clearAssetSelections()
                 }
             }) {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.system(size: 10, weight: .medium))
             }
             .buttonStyle(.borderless)
-            .help("Revert all 4 assets to embedded defaults")
+            .help("Clear all component selections")
 
 
         }
@@ -161,9 +161,6 @@ private struct SessionAssetCardView: View {
                 accentColor: accentColor,
                 isTargeted: isTargeted
             )
-            .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
-                handleDrop(providers: providers)
-            }
 
             // 3. Inline Drop Error Warning (if any)
             if let error = dropError {
@@ -207,12 +204,12 @@ private struct SessionAssetCardView: View {
                 )
                 .disabled(asset.fileURL == nil)
 
-                // Revert to Default
+                // Clear Selection
                 CardActionButton(
                     title: nil,
                     icon: "arrow.uturn.backward",
-                    tooltip: "Revert to embedded default resource",
-                    action: { session.revertAssetToDefault(kind: kind) }
+                    tooltip: "Clear selection",
+                    action: { session.clearAsset(kind: kind) }
                 )
                 .disabled(!asset.isCustom)
 
@@ -243,6 +240,10 @@ private struct SessionAssetCardView: View {
             x: 0,
             y: 1
         )
+        .contentShape(Rectangle())
+        .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
+            handleDrop(providers: providers)
+        }
         .onHover { inside in
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHoveringCard = inside
@@ -252,7 +253,7 @@ private struct SessionAssetCardView: View {
             Button("Browse / Replace...") { browseFile() }
             Button("Reload from Disk") { session.reloadAsset(kind: kind) }
                 .disabled(asset.fileURL == nil)
-            Button("Revert to Default") { session.revertAssetToDefault(kind: kind) }
+            Button("Clear Selection") { session.clearAsset(kind: kind) }
                 .disabled(!asset.isCustom)
             Divider()
             Button("Reveal in Finder") { session.revealAssetInFinder(kind: kind) }
@@ -270,10 +271,15 @@ private struct SessionAssetCardView: View {
     // MARK: - Drop Handling
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+        guard providers.count == 1 else {
+            dropError = "Drop one file at a time on its component card."
+            return false
+        }
+        guard let provider = providers.first,
+              provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { return false }
 
-        _ = provider.loadObject(ofClass: URL.self) { object, _ in
-            guard let url = object else {
+        AssetDropLoader.load(provider) { droppedURL in
+            guard let url = droppedURL else {
                 Task { @MainActor in
                     self.dropError = "Unable to read dropped file URL"
                 }
@@ -490,14 +496,6 @@ private struct AssetStatusPill: View {
                         .padding(.vertical, 1.5)
                         .background(Color.blue.opacity(0.18))
                         .foregroundColor(.blue)
-                        .cornerRadius(4)
-                } else {
-                    Text("EMBEDDED")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(Color(NSColor.separatorColor).opacity(0.25))
-                        .foregroundColor(.secondary)
                         .cornerRadius(4)
                 }
             }

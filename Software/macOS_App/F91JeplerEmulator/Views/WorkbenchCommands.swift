@@ -35,7 +35,7 @@ struct WorkbenchCommands: Commands {
                 }
             }
             Divider()
-            Button("Restore Embedded Assets") { session?.loadEmbeddedDefaults() }
+            Button("Clear Component Selections") { session?.clearAssetSelections() }
                 .disabled(session == nil)
         }
         CommandGroup(after: .sidebar) {
